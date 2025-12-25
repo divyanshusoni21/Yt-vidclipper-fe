@@ -27,7 +27,7 @@ const LandingPageV2 = () => {
             return
         }
 
-        navigate('/clip-editor', { state: { youtubeUrl } })
+        navigate('/get-clips', { state: { youtubeUrl } })
     }
 
     return (
