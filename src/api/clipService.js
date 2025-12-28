@@ -42,3 +42,24 @@ export const getClipTaskStatus = async (clipRequestId) => {
 
     return response.json();
 };
+/**
+ * Sends the clip to a specified email.
+ * @param {string} clipRequestId 
+ * @param {string} email 
+ * @returns {Promise<Object>}
+ */
+export const sendClipToEmail = async (clipRequestId, email) => {
+    const response = await fetch(`${API_BASE_URL}/api/clip-request/send_clip_to_email?clip_request_id=${clipRequestId}&email=${email}`, {
+        method: 'GET',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+    });
+
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Failed to send email');
+    }
+
+    return response.json();
+};

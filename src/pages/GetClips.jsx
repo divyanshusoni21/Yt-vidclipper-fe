@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { createClipRequest, getClipTaskStatus } from '../api/clipService'
+import { createClipRequest, getClipTaskStatus, sendClipToEmail } from '../api/clipService'
 import { useLocation } from 'react-router-dom'
 import Header from '../components/Header'
 import Footer from '../components/Footer'
@@ -25,6 +25,9 @@ function GetClips() {
         p480: { url: null, size: null }
     })
     const [isDownloading, setIsDownloading] = useState(false)
+    const [email, setEmail] = useState('')
+    const [isEmailSending, setIsEmailSending] = useState(false)
+    const [emailStatus, setEmailStatus] = useState(null) // 'success' | 'error'
 
     const pollingIntervalRef = useRef(null)
 
@@ -84,10 +87,22 @@ function GetClips() {
                 const data = await getClipTaskStatus(clipId)
                 setClipStatus(data.status)
                 if (data.status === 'completed') {
-                    setResults({
-                        p720: { url: data.clip_720p, size: data.clip_720p_size },
-                        p480: { url: data.clip_480p, size: data.clip_480p_size }
-                    })
+                    const newResults = {
+                        p720: { url: null, size: null },
+                        p480: { url: null, size: null }
+                    };
+
+                    if (data.clips && Array.isArray(data.clips)) {
+                        data.clips.forEach(clip => {
+                            const sizeStr = clip.size ? `${clip.size}MB` : null;
+                            if (clip.resolution === '720p') {
+                                newResults.p720 = { url: clip.clip, size: sizeStr };
+                            } else if (clip.resolution === '480p') {
+                                newResults.p480 = { url: clip.clip, size: sizeStr };
+                            }
+                        });
+                    }
+                    setResults(newResults)
                     setIsProcessing(false)
                     clearInterval(pollingIntervalRef.current)
                 } else if (data.status === 'failed') {
@@ -135,6 +150,22 @@ function GetClips() {
             alert('Failed to download clip.')
         } finally {
             setIsDownloading(false)
+        }
+    }
+
+    const handleSendEmail = async () => {
+        if (!email || !clipId) return
+        setIsEmailSending(true)
+        setEmailStatus(null)
+        try {
+            await sendClipToEmail(clipId, email)
+            setEmailStatus('success')
+            setEmail('')
+        } catch (error) {
+            setEmailStatus('error')
+            alert(error.message || 'Failed to send email.')
+        } finally {
+            setIsEmailSending(false)
         }
     }
 
@@ -313,15 +344,26 @@ function GetClips() {
                                     <div className="pt-4 space-y-4">
                                         {/* Email Component */}
                                         <div className="bg-blue-100 rounded-2xl p-6 flex flex-col md:flex-row items-center justify-between gap-4 border border-blue-200">
-                                            <h3 className="text-blue-900 font-semibold text-lg text-center md:text-left">Send the clips to my email.</h3>
+                                            <div className="flex flex-col">
+                                                <h3 className="text-blue-900 font-semibold text-lg text-center md:text-left">Send the clips to my email.</h3>
+                                                {emailStatus === 'success' && (
+                                                    <p className="text-green-600 text-sm font-medium mt-1 animate-fade-in">✓ Email sent successfully!</p>
+                                                )}
+                                            </div>
                                             <div className="flex w-full md:w-auto gap-2 bg-white p-1.5 rounded-xl border border-blue-200 shadow-sm">
                                                 <input
                                                     type="email"
-                                                    placeholder="Email"
+                                                    value={email}
+                                                    onChange={(e) => setEmail(e.target.value)}
+                                                    placeholder="Enter your email"
                                                     className="px-3 py-2 outline-none text-gray-700 w-full md:w-64 bg-transparent placeholder-gray-400"
                                                 />
-                                                <button className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-bold transition-colors">
-                                                    Send
+                                                <button
+                                                    onClick={handleSendEmail}
+                                                    disabled={isEmailSending || !email}
+                                                    className={`bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-bold transition-all ${isEmailSending ? 'opacity-70 cursor-wait' : ''}`}
+                                                >
+                                                    {isEmailSending ? 'Sending...' : 'Send'}
                                                 </button>
                                             </div>
                                         </div>
