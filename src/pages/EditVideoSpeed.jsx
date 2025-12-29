@@ -86,7 +86,7 @@ function EditVideoSpeed() {
                         // Trigger Download
                         const a = document.createElement('a')
                         a.href = task.output_video
-                        a.download = `speed_edited_${speed}x.mp4`
+                        a.download = `speed_edited_${parseFloat(speed.toFixed(2))}x.mp4`
                         a.target = "_blank" // Fallback
                         document.body.appendChild(a)
                         a.click()
@@ -231,7 +231,7 @@ function EditVideoSpeed() {
                                         <div className="flex justify-between items-center mb-4">
                                             <h3 className="text-gray-800 font-bold text-lg">Speed</h3>
                                             <span className="bg-gray-100 text-gray-800 px-3 py-1 rounded-full font-mono font-bold">
-                                                {speed}x
+                                                {parseFloat(speed.toFixed(2))}x
                                             </span>
                                         </div>
 
@@ -239,16 +239,16 @@ function EditVideoSpeed() {
                                             type="range"
                                             min="0.25"
                                             max="2"
-                                            step="0.25"
+                                            step="0.05"
                                             value={speed}
                                             disabled={isProcessing}
                                             onChange={(e) => handleSpeedChange(parseFloat(e.target.value))}
                                             className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-orange-500 disabled:opacity-50"
                                         />
-                                        <div className="flex justify-between text-xs text-gray-400 mt-2 font-medium">
-                                            <span>0.25x</span>
-                                            <span>1x</span>
-                                            <span>2x</span>
+                                        <div className="relative text-xs text-gray-400 mt-2 font-medium h-4">
+                                            <span className="absolute left-0">0.25x</span>
+                                            <span className="absolute left-[42.85%] -translate-x-1/2">1x</span>
+                                            <span className="absolute right-0">2x</span>
                                         </div>
                                     </div>
 
