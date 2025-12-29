@@ -53,6 +53,12 @@ function Header() {
                 Home
               </Link>
             )}
+            <Link
+              to="/edit-video-speed"
+              className="text-gray-700 hover:text-orange-600 transition-colors font-medium"
+            >
+              Speed Editor
+            </Link>
           </nav>
         </div>
       </div>
