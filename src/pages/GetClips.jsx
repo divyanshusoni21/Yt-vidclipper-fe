@@ -17,13 +17,13 @@ function GetClips() {
 
     // API State
     const [isProcessing, setIsProcessing] = useState(false)
-    const [clipId, setClipId] = useState(null)
+    const [clipRequestId, setClipRequestId] = useState(null)
     const [clipStatus, setClipStatus] = useState(null)
 
     // Result State
     const [results, setResults] = useState({
-        p720: { url: null, size: null },
-        p480: { url: null, size: null }
+        p720: { url: null, size: null, id: null },
+        p480: { url: null, size: null, id: null }
     })
     const [isDownloading, setIsDownloading] = useState(false)
     const [email, setEmail] = useState('')
@@ -73,7 +73,7 @@ function GetClips() {
                 start_time: startTime,
                 end_time: endTime
             })
-            setClipId(data.id)
+            setClipRequestId(data.id)
             setClipStatus(data.status)
         } catch (err) {
             setIsProcessing(false)
@@ -85,21 +85,21 @@ function GetClips() {
     useEffect(() => {
         const checkStatus = async () => {
             try {
-                const data = await getClipTaskStatus(clipId)
+                const data = await getClipTaskStatus(clipRequestId)
                 setClipStatus(data.status)
                 if (data.status === 'completed') {
                     const newResults = {
-                        p720: { url: null, size: null },
-                        p480: { url: null, size: null }
+                        p720: { url: null, size: null, id: null },
+                        p480: { url: null, size: null, id: null }
                     };
 
                     if (data.clips && Array.isArray(data.clips)) {
                         data.clips.forEach(clip => {
                             const sizeStr = clip.size ? `${clip.size}MB` : null;
                             if (clip.resolution === '720p') {
-                                newResults.p720 = { url: clip.clip, size: sizeStr };
+                                newResults.p720 = { url: clip.clip, size: sizeStr, id: clip.id };
                             } else if (clip.resolution === '480p') {
-                                newResults.p480 = { url: clip.clip, size: sizeStr };
+                                newResults.p480 = { url: clip.clip, size: sizeStr, id: clip.id };
                             }
                         });
                     }
@@ -114,7 +114,7 @@ function GetClips() {
             } catch (err) { console.error(err) }
         }
 
-        if (clipId && clipStatus !== 'completed' && clipStatus !== 'failed') {
+        if (clipRequestId && clipStatus !== 'completed' && clipStatus !== 'failed') {
             // First check
             checkStatus()
 
@@ -132,7 +132,7 @@ function GetClips() {
             pollingIntervalRef.current = setInterval(checkStatus, interval)
         }
         return () => { if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current) }
-    }, [clipId, clipStatus, startTime, endTime])
+    }, [clipRequestId, clipStatus, startTime, endTime])
 
     const handleDownload = async (url, label) => {
         if (!url) return
@@ -155,11 +155,11 @@ function GetClips() {
     }
 
     const handleSendEmail = async () => {
-        if (!email || !clipId) return
+        if (!email || !clipRequestId) return
         setIsEmailSending(true)
         setEmailStatus(null)
         try {
-            await sendClipToEmail(clipId, email)
+            await sendClipToEmail(clipRequestId, email)
             setEmailStatus('success')
             setEmail('')
         } catch (error) {
@@ -170,13 +170,13 @@ function GetClips() {
         }
     }
 
-    const handleEditSpeed = (url, resolution) => {
-        if (!url) return
+    const handleEditSpeed = (url, resolution, targetClipId) => {
+        if (!url || !targetClipId) return
         navigate('/edit-video-speed', {
             state: {
                 videoUrl: url,
                 resolution,
-                clipId
+                clipId: targetClipId
             }
         })
     }
@@ -315,7 +315,7 @@ function GetClips() {
 
                                     <div className="flex items-center gap-3 w-full md:w-auto">
                                         <button
-                                            onClick={() => handleEditSpeed(results.p720.url, '720p')}
+                                            onClick={() => handleEditSpeed(results.p720.url, '720p', results.p720.id)}
                                             disabled={!results.p720.url}
                                             className="flex-1 md:flex-none px-4 py-2 bg-green-100 text-green-700 font-medium rounded-lg hover:bg-green-200 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
@@ -343,7 +343,7 @@ function GetClips() {
 
                                     <div className="flex items-center gap-3 w-full md:w-auto">
                                         <button
-                                            onClick={() => handleEditSpeed(results.p480.url, '480p')}
+                                            onClick={() => handleEditSpeed(results.p480.url, '480p', results.p480.id)}
                                             disabled={!results.p480.url}
                                             className="flex-1 md:flex-none px-4 py-2 bg-green-100 text-green-700 font-medium rounded-lg hover:bg-green-200 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
