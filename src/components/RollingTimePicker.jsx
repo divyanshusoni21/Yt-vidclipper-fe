@@ -77,8 +77,8 @@ const RollingColumn = ({ range, value, onChange, label }) => {
                             <div
                                 key={num}
                                 className={`h-[36px] flex items-center justify-center snap-center transition-all duration-300 cursor-pointer select-none ${isSelected
-                                        ? 'font-bold text-xl scale-105'
-                                        : 'text-sm opacity-40 hover:opacity-70'
+                                    ? 'font-bold text-xl scale-105'
+                                    : 'text-sm opacity-40 hover:opacity-70'
                                     }`}
                                 style={{
                                     background: isSelected
@@ -106,8 +106,37 @@ const RollingColumn = ({ range, value, onChange, label }) => {
 }
 
 const RollingTimePicker = ({ value, onChange }) => {
-    // Parse HH:MM:SS
-    const [h, m, s] = value ? value.split(':').map(Number) : [0, 0, 0]
+    // Parse HH:MM:SS safely
+    const timeParts = value ? value.split(':') : ['00', '00', '00']
+    const h = parseInt(timeParts[0]) || 0
+    const m = parseInt(timeParts[1] || '0') || 0
+    const s = parseInt(timeParts[2] || '0') || 0
+
+    const [manualValue, setManualValue] = useState(value)
+
+    useEffect(() => {
+        setManualValue(value)
+    }, [value])
+
+    const handleManualChange = (e) => {
+        const val = e.target.value.replace(/[^0-9:]/g, '')
+        setManualValue(val)
+
+        // Only propagate if it looks like a valid time or is being typed
+        if (/^\d{1,2}:\d{1,2}:\d{1,2}$/.test(val)) {
+            const [mh, mm, ms] = val.split(':').map(n => parseInt(n) || 0)
+            // Clamp values
+            const clampedH = Math.min(23, mh)
+            const clampedM = Math.min(59, mm)
+            const clampedS = Math.min(59, ms)
+            onChange(`${clampedH.toString().padStart(2, '0')}:${clampedM.toString().padStart(2, '0')}:${clampedS.toString().padStart(2, '0')}`)
+        }
+    }
+
+    const handleBlur = () => {
+        // Enforce format on blur
+        onChange(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`)
+    }
 
     // Ranges
     const hours = Array.from({ length: 24 }, (_, i) => i) // 0-23
@@ -124,67 +153,84 @@ const RollingTimePicker = ({ value, onChange }) => {
     }
 
     return (
-        <div
-            className="inline-flex items-center gap-2 p-4 rounded-2xl relative overflow-hidden"
-            style={{
-                background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(249, 250, 251, 0.95) 100%)',
-                backdropFilter: 'blur(20px)',
-                boxShadow: '0 6px 24px rgba(139, 92, 246, 0.12), 0 1px 6px rgba(0, 0, 0, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.8)',
-                border: '1px solid rgba(139, 92, 246, 0.1)'
-            }}
-        >
-            {/* Animated gradient background */}
+        <div className="relative group flex flex-col items-center pb-8">
             <div
-                className="absolute inset-0 opacity-30 pointer-events-none"
+                className="inline-flex items-center gap-2 p-4 rounded-2xl relative overflow-hidden transition-all duration-300 group-hover:shadow-2xl group-hover:-translate-y-1"
                 style={{
-                    background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(59, 130, 246, 0.1) 50%, rgba(236, 72, 153, 0.1) 100%)',
-                    backgroundSize: '200% 200%',
-                    animation: 'gradient 8s ease infinite'
-                }}
-            />
-
-            <style>{`
-                @keyframes gradient {
-                    0% { background-position: 0% 50%; }
-                    50% { background-position: 100% 50%; }
-                    100% { background-position: 0% 50%; }
-                }
-                
-                .scrollbar-hide::-webkit-scrollbar {
-                    display: none;
-                }
-                
-                .scrollbar-hide {
-                    -ms-overflow-style: none;
-                    scrollbar-width: none;
-                }
-            `}</style>
-
-            <RollingColumn range={hours} value={h} onChange={(v) => updateTime('h', v)} label="HR" />
-            <span
-                className="text-2xl font-bold pt-4 select-none"
-                style={{
-                    background: 'linear-gradient(135deg, #8B5CF6 0%, #3B82F6 100%)',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    textShadow: '0 1px 8px rgba(139, 92, 246, 0.3)'
+                    background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(249, 250, 251, 0.95) 100%)',
+                    backdropFilter: 'blur(20px)',
+                    boxShadow: '0 6px 24px rgba(139, 92, 246, 0.12), 0 1px 6px rgba(0, 0, 0, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.8)',
+                    border: '1px solid rgba(139, 92, 246, 0.1)'
                 }}
             >
-                :
-            </span>
-            <RollingColumn range={minutes} value={m} onChange={(v) => updateTime('m', v)} label="MIN" />
-            <span
-                className="text-2xl font-bold pt-4 select-none"
-                style={{
-                    background: 'linear-gradient(135deg, #8B5CF6 0%, #3B82F6 100%)',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    textShadow: '0 1px 8px rgba(139, 92, 246, 0.3)'
-                }}
-            >
-                :
-            </span>
-            <RollingColumn range={seconds} value={s} onChange={(v) => updateTime('s', v)} label="SEC" />
+                {/* Animated gradient background */}
+                <div
+                    className="absolute inset-0 opacity-30 pointer-events-none"
+                    style={{
+                        background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(59, 130, 246, 0.1) 50%, rgba(236, 72, 153, 0.1) 100%)',
+                        backgroundSize: '200% 200%',
+                        animation: 'gradient 8s ease infinite'
+                    }}
+                />
+
+                <style>{`
+                    @keyframes gradient {
+                        0% { background-position: 0% 50%; }
+                        50% { background-position: 100% 50%; }
+                        100% { background-position: 0% 50%; }
+                    }
+                    
+                    .scrollbar-hide::-webkit-scrollbar {
+                        display: none;
+                    }
+                    
+                    .scrollbar-hide {
+                        -ms-overflow-style: none;
+                        scrollbar-width: none;
+                    }
+                `}</style>
+
+                <RollingColumn range={hours} value={h} onChange={(v) => updateTime('h', v)} label="HR" />
+                <span
+                    className="text-2xl font-bold pt-4 select-none"
+                    style={{
+                        background: 'linear-gradient(135deg, #8B5CF6 0%, #3B82F6 100%)',
+                        WebkitBackgroundClip: 'text',
+                        WebkitTextFillColor: 'transparent',
+                        textShadow: '0 1px 8px rgba(139, 92, 246, 0.3)'
+                    }}
+                >
+                    :
+                </span>
+                <RollingColumn range={minutes} value={m} onChange={(v) => updateTime('m', v)} label="MIN" />
+                <span
+                    className="text-2xl font-bold pt-4 select-none"
+                    style={{
+                        background: 'linear-gradient(135deg, #8B5CF6 0%, #3B82F6 100%)',
+                        WebkitBackgroundClip: 'text',
+                        WebkitTextFillColor: 'transparent',
+                        textShadow: '0 1px 8px rgba(139, 92, 246, 0.3)'
+                    }}
+                >
+                    :
+                </span>
+                <RollingColumn range={seconds} value={s} onChange={(v) => updateTime('s', v)} label="SEC" />
+
+                {/* Bottom line indicator */}
+                <div className="absolute bottom-0 left-0 right-0 h-[1.5px] bg-gradient-to-r from-transparent via-purple-300/30 to-transparent" />
+            </div>
+
+            {/* Manual Text Input - Outside the overflow-hidden container */}
+            <div className="absolute -bottom-6 left-0 right-0 px-2 transition-all duration-300 opacity-0 transform translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 group-focus-within:opacity-100 group-focus-within:translate-y-0">
+                <input
+                    type="text"
+                    value={manualValue}
+                    onChange={handleManualChange}
+                    onBlur={handleBlur}
+                    placeholder="HH:MM:SS"
+                    className="w-full bg-white/90 backdrop-blur-md border border-purple-200 rounded-lg py-1.5 text-center font-mono text-xs text-purple-700 shadow-lg focus:ring-4 focus:ring-purple-500/10 outline-none transition-all"
+                />
+            </div>
         </div>
     )
 }
