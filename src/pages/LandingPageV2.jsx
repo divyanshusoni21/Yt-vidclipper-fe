@@ -77,6 +77,76 @@ const LandingPageV2 = () => {
                 </div>
             </section>
 
+            {/* Problem & Solution Section */}
+            <section className="py-24 bg-white relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-full overflow-hidden z-0 opacity-30 pointer-events-none">
+                    <div className="absolute -left-[10%] top-[20%] w-[40%] h-[40%] rounded-full bg-gradient-to-tr from-pink-100 to-purple-100 blur-3xl animate-pulse"></div>
+                    <div className="absolute -right-[10%] bottom-[20%] w-[40%] h-[40%] rounded-full bg-gradient-to-bl from-blue-100 to-cyan-100 blur-3xl animate-pulse delay-1000"></div>
+                </div>
+
+                <div className="container mx-auto px-6 relative z-10">
+                    <div className="text-center max-w-3xl mx-auto mb-20">
+                        <span className="text-blue-600 font-bold tracking-wider uppercase text-sm mb-3 block">Why we built {projectName}?</span>
+                        <h2 className="text-4xl md:text-5xl font-bold mb-6 text-gray-900">Solving the <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-pink-600">Sharing Dilemma</span></h2>
+                        <p className="text-xl text-gray-500">We've all been there. You find a gem in a long video, but sharing it is a hassle.</p>
+                    </div>
+
+                    <div className="grid md:grid-cols-2 gap-12 lg:gap-20 items-center mb-24">
+                        <div className="order-2 md:order-1">
+                            <div className="bg-gradient-to-br from-gray-50 to-white p-8 rounded-[2.5rem] border border-gray-100 shadow-xl relative group hover:shadow-2xl transition-all duration-300">
+                                <div className="absolute -top-6 -left-6 bg-red-100 text-red-600 p-4 rounded-2xl shadow-lg transform rotate-[-6deg] group-hover:rotate-[-12deg] transition-transform duration-300">
+                                    <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                                </div>
+                                <h3 className="text-2xl font-bold mb-4 text-gray-800">The Problem</h3>
+                                <p className="text-gray-600 text-lg leading-relaxed mb-6">
+                                    You watch a fantastic 2-hour podcast and find a hilarious <span className="font-semibold text-gray-900">30-second moment</span>. You want to share it, but no one actually clicks or opens <span className="font-semibold text-gray-900">timestamped links</span>, and screen recording is low quality.
+                                </p>
+                                <div className="h-1 w-20 bg-red-200 rounded-full"></div>
+                            </div>
+                        </div>
+                        <div className="order-1 md:order-2">
+                            <div className="bg-gradient-to-br from-blue-50 to-white p-8 rounded-[2.5rem] border border-blue-100 shadow-xl relative group hover:shadow-2xl hover:shadow-blue-500/10 transition-all duration-300">
+                                <div className="absolute -top-6 -right-6 bg-blue-100 text-blue-600 p-4 rounded-2xl shadow-lg transform rotate-[6deg] group-hover:rotate-[12deg] transition-transform duration-300">
+                                    <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                </div>
+                                <h3 className="text-2xl font-bold mb-4 text-gray-800">The Solution</h3>
+                                <p className="text-gray-600 text-lg leading-relaxed mb-6">
+                                    {projectName} lets you extract <span className="font-semibold text-blue-600">exact timeframes</span> in high definition. Simply paste the link, choose your start and end times, and get a crisp 720p clip ready to go viral.
+                                </p>
+                                <div className="h-1 w-20 bg-blue-200 rounded-full"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="grid md:grid-cols-2 gap-12 lg:gap-20 items-center">
+                        <div className="order-1">
+                            <div className="bg-gradient-to-br from-gray-50 to-white p-8 rounded-[2.5rem] border border-gray-100 shadow-xl relative group hover:shadow-2xl transition-all duration-300">
+                                <div className="absolute -top-6 -left-6 bg-yellow-100 text-yellow-600 p-4 rounded-2xl shadow-lg transform rotate-[-6deg] group-hover:rotate-[-12deg] transition-transform duration-300">
+                                    <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                </div>
+                                <h3 className="text-2xl font-bold mb-4 text-gray-800">The Problem</h3>
+                                <p className="text-gray-600 text-lg leading-relaxed mb-6">
+                                    Social media has limits. Instagram Stories and WhatsApp Status only allow <span className="font-semibold text-gray-900">1 minute</span>. But your perfect clip is 1 minute and 15 seconds long.
+                                </p>
+                                <div className="h-1 w-20 bg-yellow-200 rounded-full"></div>
+                            </div>
+                        </div>
+                        <div className="order-2">
+                            <div className="bg-gradient-to-br from-green-50 to-white p-8 rounded-[2.5rem] border border-green-100 shadow-xl relative group hover:shadow-2xl hover:shadow-green-500/10 transition-all duration-300">
+                                <div className="absolute -top-6 -right-6 bg-green-100 text-green-600 p-4 rounded-2xl shadow-lg transform rotate-[6deg] group-hover:rotate-[12deg] transition-transform duration-300">
+                                    <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                                </div>
+                                <h3 className="text-2xl font-bold mb-4 text-gray-800">The Solution</h3>
+                                <p className="text-gray-600 text-lg leading-relaxed mb-6">
+                                    Our built-in <span className="font-semibold text-green-600">Speed Editor</span> solves this instantly. Speed up your 1:15 clip to 1.25x, and it fits perfectly into a 60-second Story without losing any context.
+                                </p>
+                                <div className="h-1 w-20 bg-green-200 rounded-full"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             {/* How It Works Section */}
             <section className="py-20 bg-white">
                 <div className="container mx-auto px-6">
@@ -123,25 +193,19 @@ const LandingPageV2 = () => {
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4 max-w-6xl mx-auto">
-                        {/* Speed Card */}
+                        {/* Cloud Clipping Card */}
                         <div className="md:col-span-2 md:row-span-2 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-[2.5rem] p-10 flex flex-col justify-between text-white overflow-hidden relative group">
                             <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-125 transition-transform duration-700 pointer-events-none">
-                                <svg className="w-80 h-80" fill="currentColor" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                                <svg className="w-80 h-80" fill="currentColor" viewBox="0 0 24 24"><path d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
                             </div>
                             <div className="relative z-10">
                                 <div className="w-14 h-14 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center mb-8 border border-white/20">
-                                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
                                 </div>
-                                <h3 className="text-4xl font-bold mb-6">Lightning Fast</h3>
+                                <h3 className="text-4xl font-bold mb-6">Clip Without Downloading</h3>
                                 <p className="text-blue-100 text-xl leading-relaxed max-w-sm font-light">
-                                    Our cloud-native engine processes your YouTube clips in seconds, not minutes. Spend less time waiting and more time creating.
+                                    Don't waste time downloading entire videos just to edit a small clip. Simply paste the URL, select your timeframe, and get your clip instantly.
                                 </p>
-                            </div>
-                            <div className="relative z-10 pt-12">
-                                <div className="flex items-center space-x-3 bg-blue-500/30 w-fit px-5 py-2.5 rounded-full border border-white/10 text-sm font-medium backdrop-blur-sm">
-                                    <div className="w-2.5 h-2.5 bg-green-400 rounded-full animate-pulse shadow-[0_0_10px_rgba(74,222,128,0.5)]"></div>
-                                    <span>Average processing: 14s</span>
-                                </div>
                             </div>
                         </div>
 
