@@ -17,13 +17,16 @@ function GetClips() {
 
     // API State
     const [isProcessing, setIsProcessing] = useState(false)
-    const [clipRequestId, setClipRequestId] = useState(null)
-    const [clipStatus, setClipStatus] = useState(null)
+    const [clipRequestId, setClipRequestId] = useState(() => sessionStorage.getItem('clipRequestId'))
+    const [clipStatus, setClipStatus] = useState(() => sessionStorage.getItem('clipStatus'))
 
     // Result State
-    const [results, setResults] = useState({
-        p720: { url: null, size: null, id: null },
-        p480: { url: null, size: null, id: null }
+    const [results, setResults] = useState(() => {
+        const saved = sessionStorage.getItem('results')
+        return saved ? JSON.parse(saved) : {
+            p720: { url: null, size: null, id: null },
+            p480: { url: null, size: null, id: null }
+        }
     })
     const [isDownloading, setIsDownloading] = useState(false)
     const [email, setEmail] = useState('')
@@ -54,6 +57,30 @@ function GetClips() {
         return ''
     }
 
+    // --- Persistence ---
+    useEffect(() => {
+        if (youtubeUrl) sessionStorage.setItem('youtubeUrl', youtubeUrl)
+        if (startTime) sessionStorage.setItem('startTime', startTime)
+        if (endTime) sessionStorage.setItem('endTime', endTime)
+        if (videoTitle) sessionStorage.setItem('videoTitle', videoTitle)
+        if (clipRequestId) sessionStorage.setItem('clipRequestId', clipRequestId)
+        if (clipStatus) sessionStorage.setItem('clipStatus', clipStatus)
+        if (results) sessionStorage.setItem('results', JSON.stringify(results))
+    }, [youtubeUrl, startTime, endTime, videoTitle, clipRequestId, clipStatus, results])
+
+    // Load static info
+    useEffect(() => {
+        const savedUrl = sessionStorage.getItem('youtubeUrl')
+        const savedStart = sessionStorage.getItem('startTime')
+        const savedEnd = sessionStorage.getItem('endTime')
+        const savedTitle = sessionStorage.getItem('videoTitle')
+
+        if (savedUrl && !location.state?.youtubeUrl) set_youtube_url(savedUrl)
+        if (savedStart) set_start_time(savedStart)
+        if (savedEnd) set_end_time(savedEnd)
+        if (savedTitle) setVideoTitle(savedTitle)
+    }, [])
+
     // --- API Logic ---
     const handleGenerateClip = async () => {
         set_errors({})
@@ -65,7 +92,7 @@ function GetClips() {
 
         setIsProcessing(true)
         setClipStatus('pending')
-        setResults({ p720: { url: null, size: null }, p480: { url: null, size: null } })
+        setResults({ p720: { url: null, size: null, id: null }, p480: { url: null, size: null, id: null } })
 
         try {
             const data = await createClipRequest({
@@ -115,6 +142,7 @@ function GetClips() {
         }
 
         if (clipRequestId && clipStatus !== 'completed' && clipStatus !== 'failed') {
+            setIsProcessing(true) // Resume processing state if page reloaded/navigated back
             // First check
             checkStatus()
 

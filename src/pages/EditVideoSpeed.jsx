@@ -83,14 +83,29 @@ function EditVideoSpeed() {
                         setIsProcessing(false)
                         setProcessStatus('completed')
 
-                        // Trigger Download
-                        const a = document.createElement('a')
-                        a.href = task.output_video
-                        a.download = `speed_edited_${parseFloat(speed.toFixed(2))}x.mp4`
-                        a.target = "_blank" // Fallback
-                        document.body.appendChild(a)
-                        a.click()
-                        document.body.removeChild(a)
+                        // Trigger Download via Blob to force download prompt
+                        try {
+                            const response = await fetch(task.output_video)
+                            const blob = await response.blob()
+                            const url = window.URL.createObjectURL(blob)
+                            const a = document.createElement('a')
+                            a.href = url
+                            a.download = `speed_edited_${parseFloat(speed.toFixed(2))}x.mp4`
+                            document.body.appendChild(a)
+                            a.click()
+                            document.body.removeChild(a)
+                            window.URL.revokeObjectURL(url)
+                        } catch (downloadErr) {
+                            console.error('Download prompt failed:', downloadErr)
+                            // Fallback
+                            const a = document.createElement('a')
+                            a.href = task.output_video
+                            a.download = `speed_edited_${parseFloat(speed.toFixed(2))}x.mp4`
+                            a.target = "_blank"
+                            document.body.appendChild(a)
+                            a.click()
+                            document.body.removeChild(a)
+                        }
 
                         clearInterval(pollingRef.current)
                     } else if (task.status === 'failed') {
@@ -276,13 +291,6 @@ function EditVideoSpeed() {
                                         ) : (
                                             "Apply Speed & Download"
                                         )}
-                                    </button>
-                                    <button
-                                        disabled={isProcessing}
-                                        onClick={() => navigate(-1)}
-                                        className="w-full py-3 text-gray-500 font-bold hover:text-gray-800 transition-colors disabled:opacity-50"
-                                    >
-                                        Cancel
                                     </button>
                                 </div>
                             </div>
