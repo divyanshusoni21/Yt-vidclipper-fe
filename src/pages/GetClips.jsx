@@ -9,11 +9,14 @@ import { projectName, CLIP_TIMEOUT_MS } from '../config'
 function GetClips() {
     const location = useLocation()
     const navigate = useNavigate()
-    const [youtubeUrl, set_youtube_url] = useState(location.state?.youtubeUrl || '')
+    const [youtubeUrl, set_youtube_url] = useState(() => {
+        // Priority: Navigation state > SessionStorage > Empty
+        return location.state?.youtubeUrl || sessionStorage.getItem('youtubeUrl') || ''
+    })
     // Default times for the picker (00:00:00)
-    const [startTime, set_start_time] = useState('00:00:00')
-    const [endTime, set_end_time] = useState('00:00:00')
-    const [videoTitle, setVideoTitle] = useState('')
+    const [startTime, set_start_time] = useState(() => sessionStorage.getItem('startTime') || '00:00:00')
+    const [endTime, set_end_time] = useState(() => sessionStorage.getItem('endTime') || '00:00:00')
+    const [videoTitle, setVideoTitle] = useState(() => sessionStorage.getItem('videoTitle') || '')
     const [errors, set_errors] = useState({})
 
     // API State
@@ -42,9 +45,10 @@ function GetClips() {
 
     // --- Helpers ---
     const get_video_id = (url) => {
-        const regex = /[?&]v=([^&#]*)/
-        const match = url.match(regex)
-        return match ? match[1] : null
+        if (!url) return null;
+        const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|live|shorts)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i;
+        const match = url.match(regex);
+        return match ? match[1] : null;
     }
     const videoId = get_video_id(youtubeUrl)
 
@@ -62,30 +66,56 @@ function GetClips() {
         return ''
     }
 
-    // --- Persistence ---
+    // --- Persistence & Navigation Sync ---
+    useEffect(() => {
+        // If we arrived with a fresh URL from navigation, and it's different from what's stored,
+        // we should treat it as a new session and clear old task results.
+        const savedUrl = sessionStorage.getItem('youtubeUrl');
+        const navigationUrl = location.state?.youtubeUrl;
+
+        if (navigationUrl && navigationUrl !== savedUrl) {
+            // New URL arrived, clear background task state
+            setClipRequestId(null);
+            setClipStatus(null);
+            setProcessStartTime(null);
+            setResults({
+                p720: { url: null, size: null, id: null },
+                p480: { url: null, size: null, id: null }
+            });
+            // Clear from storage explicitly too
+            sessionStorage.removeItem('clipRequestId');
+            sessionStorage.removeItem('clipStatus');
+            sessionStorage.removeItem('processStartTime');
+            sessionStorage.removeItem('results');
+        }
+    }, [location.state?.youtubeUrl]);
+
     useEffect(() => {
         if (youtubeUrl) sessionStorage.setItem('youtubeUrl', youtubeUrl)
-        if (startTime) sessionStorage.setItem('startTime', startTime)
-        if (endTime) sessionStorage.setItem('endTime', endTime)
-        if (videoTitle) sessionStorage.setItem('videoTitle', videoTitle)
-        if (clipRequestId) sessionStorage.setItem('clipRequestId', clipRequestId)
-        if (clipStatus) sessionStorage.setItem('clipStatus', clipStatus)
-        if (processStartTime) sessionStorage.setItem('processStartTime', processStartTime.toString())
-        if (results) sessionStorage.setItem('results', JSON.stringify(results))
+        sessionStorage.setItem('startTime', startTime)
+        sessionStorage.setItem('endTime', endTime)
+        sessionStorage.setItem('videoTitle', videoTitle)
+
+        if (clipRequestId) {
+            sessionStorage.setItem('clipRequestId', clipRequestId)
+        } else {
+            sessionStorage.removeItem('clipRequestId')
+        }
+
+        if (clipStatus) {
+            sessionStorage.setItem('clipStatus', clipStatus)
+        } else {
+            sessionStorage.removeItem('clipStatus')
+        }
+
+        if (processStartTime) {
+            sessionStorage.setItem('processStartTime', processStartTime.toString())
+        } else {
+            sessionStorage.removeItem('processStartTime')
+        }
+
+        sessionStorage.setItem('results', JSON.stringify(results))
     }, [youtubeUrl, startTime, endTime, videoTitle, clipRequestId, clipStatus, results, processStartTime])
-
-    // Load static info
-    useEffect(() => {
-        const savedUrl = sessionStorage.getItem('youtubeUrl')
-        const savedStart = sessionStorage.getItem('startTime')
-        const savedEnd = sessionStorage.getItem('endTime')
-        const savedTitle = sessionStorage.getItem('videoTitle')
-
-        if (savedUrl && !location.state?.youtubeUrl) set_youtube_url(savedUrl)
-        if (savedStart) set_start_time(savedStart)
-        if (savedEnd) set_end_time(savedEnd)
-        if (savedTitle) setVideoTitle(savedTitle)
-    }, [])
 
     // --- API Logic ---
     const handleGenerateClip = async () => {
@@ -98,6 +128,9 @@ function GetClips() {
 
         setIsProcessing(true)
         setClipStatus('pending')
+        setClipRequestId(null) // <--- CRITICAL FIX: Clear old ID to prevent polling race condition
+        setProcessStartTime(null)
+        sessionStorage.removeItem('processStartTime')
         setResults({ p720: { url: null, size: null, id: null }, p480: { url: null, size: null, id: null } })
 
         try {
@@ -178,7 +211,7 @@ function GetClips() {
             pollingIntervalRef.current = setInterval(checkStatus, interval)
         }
         return () => { if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current) }
-    }, [clipRequestId, clipStatus, startTime, endTime])
+    }, [clipRequestId, clipStatus, startTime, endTime, processStartTime])
 
     const handleDownload = async (url, label) => {
         if (!url) return
@@ -230,10 +263,18 @@ function GetClips() {
     // Attempt to fetch title via oEmbed
     useEffect(() => {
         if (youtubeUrl && videoId) {
-            fetch(`https://noembed.com/embed?url=${youtubeUrl}`)
+            // Reset title immediately when URL changes
+            setVideoTitle('')
+
+            // Normalize URL for oEmbed (some providers prefer the standard watch format)
+            const normalizedUrl = `https://www.youtube.com/watch?v=${videoId}`
+
+            fetch(`https://noembed.com/embed?url=${normalizedUrl}`)
                 .then(res => res.json())
                 .then(data => { if (data.title) setVideoTitle(data.title) })
                 .catch(() => { })
+        } else {
+            setVideoTitle('')
         }
     }, [youtubeUrl, videoId])
 

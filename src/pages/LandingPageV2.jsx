@@ -10,7 +10,7 @@ const LandingPageV2 = () => {
     const navigate = useNavigate()
 
     const validate_youtube_url = (url) => {
-        const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/)[\w-]+/
+        const youtubeRegex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|live|shorts)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i;
         return youtubeRegex.test(url)
     }
 
