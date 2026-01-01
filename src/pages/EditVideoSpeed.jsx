@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import Header from '../components/Header'
 import Footer from '../components/Footer'
 import { initiateSpeedEdit, getSpeedEditStatus } from '../api/clipService'
+import { projectName } from '../config'
 
 function EditVideoSpeed() {
     const location = useLocation()

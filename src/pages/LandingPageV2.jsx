@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Header from '../components/Header'
 import Footer from '../components/Footer'
+import { projectName } from '../config'
 
 const LandingPageV2 = () => {
     const [youtubeUrl, set_youtube_url] = useState('')
@@ -47,7 +48,7 @@ const LandingPageV2 = () => {
                         into <span className="text-blue-600">Perfect Clips</span>
                     </h1>
                     <p className="max-w-2xl mx-auto text-xl text-gray-600 mb-12 leading-relaxed">
-                        The fastest way to crop, edit, and download 720p & 480p clips from any YouTube video. No software required.
+                        The fastest way to crop, edit, and download clips with {projectName}. No software required.
                     </p>
 
                     <div className="max-w-3xl mx-auto bg-white p-2 rounded-2xl shadow-2xl border border-gray-100 ring-4 ring-gray-50/50 transform transition-all hover:scale-[1.01]">

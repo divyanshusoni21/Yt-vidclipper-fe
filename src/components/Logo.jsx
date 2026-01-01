@@ -1,3 +1,5 @@
+import { projectName } from '../config';
+
 const Logo = ({ className = "" }) => {
     return (
         <div className={`flex items-center space-x-2 group ${className}`}>
@@ -22,7 +24,7 @@ const Logo = ({ className = "" }) => {
                 </div>
             </div>
             <span className="text-2xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-600">
-                ClipTube
+                {projectName}
             </span>
         </div>
     );

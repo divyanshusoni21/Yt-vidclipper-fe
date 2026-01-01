@@ -1,21 +1,8 @@
 import { Link } from 'react-router-dom'
 import Logo from './Logo'
+import { projectName } from '../config'
 
 function Footer() {
-  const handle_smooth_scroll = (e, targetId) => {
-    e.preventDefault()
-    const element = document.getElementById(targetId)
-    if (element) {
-      const headerOffset = 80
-      const elementPosition = element.getBoundingClientRect().top
-      const offsetPosition = elementPosition + window.pageYOffset - headerOffset
-
-      window.scrollTo({
-        top: offsetPosition,
-        behavior: 'smooth'
-      })
-    }
-  }
 
   return (
     <footer className="bg-gray-900 text-white mt-auto">
@@ -24,7 +11,7 @@ function Footer() {
           <div className="space-y-6">
             <Logo className="invert brightness-200" />
             <p className="text-gray-400 text-lg leading-relaxed">
-              The professional way to create perfect YouTube clips. Fast, free, and beautiful.
+              The professional way to create perfect clips with {projectName}. Fast, free, and beautiful.
             </p>
           </div>
           <div>
@@ -39,22 +26,12 @@ function Footer() {
                 </Link>
               </li>
               <li>
-                <a
-                  href="#features"
-                  onClick={(e) => handle_smooth_scroll(e, 'features')}
+                <Link
+                  to="/get-clips"
                   className="hover:text-white transition-colors"
                 >
-                  Features
-                </a>
-              </li>
-              <li>
-                <a
-                  href="#how-it-works"
-                  onClick={(e) => handle_smooth_scroll(e, 'how-it-works')}
-                  className="hover:text-white transition-colors"
-                >
-                  How It Works
-                </a>
+                  Clip Cutter
+                </Link>
               </li>
             </ul>
           </div>
@@ -66,7 +43,7 @@ function Footer() {
           </div>
         </div>
         <div className="border-t border-gray-800 mt-12 pt-8 text-center text-gray-500 text-sm">
-          <p>&copy; {new Date().getFullYear()} ClipTube. All rights reserved.</p>
+          <p>&copy; {new Date().getFullYear()} {projectName}. All rights reserved.</p>
         </div>
       </div>
     </footer>

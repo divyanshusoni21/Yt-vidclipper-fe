@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import Header from '../components/Header'
 import Footer from '../components/Footer'
 import RollingTimePicker from '../components/RollingTimePicker'
+import { projectName } from '../config'
 
 function GetClips() {
     const location = useLocation()
