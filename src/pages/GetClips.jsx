@@ -4,7 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import Header from '../components/Header'
 import Footer from '../components/Footer'
 import RollingTimePicker from '../components/RollingTimePicker'
-import { projectName } from '../config'
+import { projectName, CLIP_TIMEOUT_MS } from '../config'
 
 function GetClips() {
     const location = useLocation()
@@ -20,6 +20,10 @@ function GetClips() {
     const [isProcessing, setIsProcessing] = useState(false)
     const [clipRequestId, setClipRequestId] = useState(() => sessionStorage.getItem('clipRequestId'))
     const [clipStatus, setClipStatus] = useState(() => sessionStorage.getItem('clipStatus'))
+    const [processStartTime, setProcessStartTime] = useState(() => {
+        const saved = sessionStorage.getItem('processStartTime')
+        return saved ? parseInt(saved, 10) : null
+    })
 
     // Result State
     const [results, setResults] = useState(() => {
@@ -66,8 +70,9 @@ function GetClips() {
         if (videoTitle) sessionStorage.setItem('videoTitle', videoTitle)
         if (clipRequestId) sessionStorage.setItem('clipRequestId', clipRequestId)
         if (clipStatus) sessionStorage.setItem('clipStatus', clipStatus)
+        if (processStartTime) sessionStorage.setItem('processStartTime', processStartTime.toString())
         if (results) sessionStorage.setItem('results', JSON.stringify(results))
-    }, [youtubeUrl, startTime, endTime, videoTitle, clipRequestId, clipStatus, results])
+    }, [youtubeUrl, startTime, endTime, videoTitle, clipRequestId, clipStatus, results, processStartTime])
 
     // Load static info
     useEffect(() => {
@@ -103,6 +108,9 @@ function GetClips() {
             })
             setClipRequestId(data.id)
             setClipStatus(data.status)
+            const startTimeStamp = Date.now()
+            setProcessStartTime(startTimeStamp)
+            sessionStorage.setItem('processStartTime', startTimeStamp.toString())
         } catch (err) {
             setIsProcessing(false)
             set_errors({ api: err.message })
@@ -112,31 +120,40 @@ function GetClips() {
     // Dynamic Polling Logic
     useEffect(() => {
         const checkStatus = async () => {
+            // Check for timeout
+            if (processStartTime && (Date.now() - processStartTime) > CLIP_TIMEOUT_MS) {
+                setIsProcessing(false)
+                if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current)
+                set_errors(prev => ({ ...prev, api: 'Processing timed out after 5 minutes. Please try again or check if the video is too long.' }))
+                setClipStatus('failed')
+                return
+            }
+
             try {
                 const data = await getClipTaskStatus(clipRequestId)
                 setClipStatus(data.status)
-                if (data.status === 'completed') {
-                    const newResults = {
-                        p720: { url: null, size: null, id: null },
-                        p480: { url: null, size: null, id: null }
-                    };
-
-                    if (data.clips && Array.isArray(data.clips)) {
+                // Update results as soon as clips are available in the clips array
+                if (data.clips && Array.isArray(data.clips) && data.clips.length > 0) {
+                    setResults(prev => {
+                        const next = { ...prev };
                         data.clips.forEach(clip => {
                             const sizeStr = clip.size ? `${clip.size}MB` : null;
                             if (clip.resolution === '720p') {
-                                newResults.p720 = { url: clip.clip, size: sizeStr, id: clip.id };
+                                next.p720 = { url: clip.clip, size: sizeStr, id: clip.id };
                             } else if (clip.resolution === '480p') {
-                                newResults.p480 = { url: clip.clip, size: sizeStr, id: clip.id };
+                                next.p480 = { url: clip.clip, size: sizeStr, id: clip.id };
                             }
                         });
-                    }
-                    setResults(newResults)
+                        return next;
+                    });
+                }
+
+                if (data.status === 'completed') {
                     setIsProcessing(false)
                     clearInterval(pollingIntervalRef.current)
                 } else if (data.status === 'failed') {
                     setIsProcessing(false)
-                    clearInterval(pollingIntervalRef.current)
+                    if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current)
                     set_errors(prev => ({ ...prev, api: data.error_message || 'Processing failed' }))
                 }
             } catch (err) { console.error(err) }
@@ -339,7 +356,7 @@ function GetClips() {
                                         {results.p720.size && (
                                             <span className="bg-yellow-50 text-yellow-700 px-3 py-1 rounded-md text-sm border border-yellow-100">{results.p720.size}</span>
                                         )}
-                                        {isProcessing && <div className="h-2 w-24 bg-gray-200 rounded-full animate-pulse"></div>}
+                                        {!results.p720.url && isProcessing && <div className="h-2 w-24 bg-gray-200 rounded-full animate-pulse"></div>}
                                     </div>
 
                                     <div className="flex items-center gap-3 w-full md:w-auto">
@@ -367,7 +384,7 @@ function GetClips() {
                                         {results.p480.size && (
                                             <span className="bg-yellow-50 text-yellow-700 px-3 py-1 rounded-md text-sm border border-yellow-100">{results.p480.size}</span>
                                         )}
-                                        {isProcessing && <div className="h-2 w-24 bg-gray-200 rounded-full animate-pulse"></div>}
+                                        {!results.p480.url && isProcessing && <div className="h-2 w-24 bg-gray-200 rounded-full animate-pulse"></div>}
                                     </div>
 
                                     <div className="flex items-center gap-3 w-full md:w-auto">
@@ -417,12 +434,6 @@ function GetClips() {
                                             </div>
                                         </div>
 
-                                        {/* Coffee Component */}
-                                        <div className="bg-blue-100 rounded-2xl p-6 text-center border border-blue-200 hover:bg-blue-200/50 transition-colors cursor-pointer group">
-                                            <h3 className="text-blue-900 font-semibold text-lg group-hover:scale-105 transition-transform">
-                                                Did it help you? <span className="underline decoration-blue-400 decoration-2 underline-offset-4">Buy me a coffee</span> ☕️
-                                            </h3>
-                                        </div>
                                     </div>
                                 )}
 
