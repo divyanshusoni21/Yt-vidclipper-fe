@@ -33,13 +33,30 @@ function Footer() {
                   Clip Cutter
                 </Link>
               </li>
+              <li>
+                <Link
+                  to="/edit-video-speed"
+                  className="hover:text-white transition-colors"
+                >
+                  Video Speed Editor
+                </Link>
+              </li>
             </ul>
           </div>
           <div>
             <h4 className="text-lg font-semibold mb-4">Contact</h4>
-            <p className="text-gray-400">
+            <p className="text-gray-400 mb-6">
               Questions or feedback? We'd love to hear from you.
             </p>
+            <a
+              href="https://buymeacoffee.com/divyanshu_soni"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center space-x-2 bg-yellow-500/10 text-yellow-500 px-4 py-2 rounded-xl border border-yellow-500/20 hover:bg-yellow-500 hover:text-white transition-all duration-300 group"
+            >
+              <span className="font-bold">Buy me a coffee</span>
+              <span className="group-hover:rotate-12 transition-transform">☕️</span>
+            </a>
           </div>
         </div>
         <div className="border-t border-gray-800 mt-12 pt-8 text-center text-gray-500 text-sm">
