@@ -4,7 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import Header from '../components/Header'
 import Footer from '../components/Footer'
 import RollingTimePicker from '../components/RollingTimePicker'
-import { projectName, CLIP_TIMEOUT_MS } from '../config'
+import { CLIP_TIMEOUT_MS, API_BASE_URL } from '../config'
 
 function GetClips() {
     const location = useLocation()
@@ -17,6 +17,7 @@ function GetClips() {
     const [startTime, set_start_time] = useState(() => sessionStorage.getItem('startTime') || '00:00:00')
     const [endTime, set_end_time] = useState(() => sessionStorage.getItem('endTime') || '00:00:00')
     const [videoTitle, setVideoTitle] = useState(() => sessionStorage.getItem('videoTitle') || '')
+    const [videoDuration, setVideoDuration] = useState(0)
     const [errors, set_errors] = useState({})
 
     // API State
@@ -42,6 +43,7 @@ function GetClips() {
     const [emailStatus, setEmailStatus] = useState(null) // 'success' | 'error'
 
     const pollingIntervalRef = useRef(null)
+    const iframeRef = useRef(null)
 
     // --- Helpers ---
     const get_video_id = (url) => {
@@ -58,11 +60,15 @@ function GetClips() {
     }
 
     const validate_logic = (start, end) => {
-        // Basic format check is implicit with the picker but good to keep
         const s = time_to_seconds(start)
         const e = time_to_seconds(end)
-        if (e <= s) return 'End time must be > Start time'
-        if ((e - s) > 600) return 'Max duration is 10 mins'
+        const duration = e - s
+
+        if (e <= s) return 'End time must be greater than start time'
+        if (videoDuration > 0 && e > videoDuration) return 'End time exceeds video duration'
+        if (duration < 5) return 'Clip duration must be at least 5 seconds'
+        if (duration > 600) return 'Clip duration cannot exceed 10 minutes'
+
         return ''
     }
 
@@ -213,11 +219,14 @@ function GetClips() {
         return () => { if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current) }
     }, [clipRequestId, clipStatus, startTime, endTime, processStartTime])
 
-    const handleDownload = async (url, label) => {
-        if (!url) return
+    const handleDownload = async (clipId, label) => {
+        if (!clipId) return
         setIsDownloading(true)
         try {
-            const response = await fetch(url)
+            const response = await fetch(`${API_BASE_URL}/api/download-clip/${clipId}/`)
+            if (!response.ok) {
+                throw new Error('Failed to download clip')
+            }
             const blob = await response.blob()
             const link = document.createElement('a')
             link.href = URL.createObjectURL(blob)
@@ -261,22 +270,57 @@ function GetClips() {
     }
 
     // Attempt to fetch title via oEmbed
+    // Fetch video duration using YouTube iframe API
     useEffect(() => {
-        if (youtubeUrl && videoId) {
-            // Reset title immediately when URL changes
+        if (!videoId) {
+            setVideoDuration(0)
             setVideoTitle('')
-
-            // Normalize URL for oEmbed (some providers prefer the standard watch format)
-            const normalizedUrl = `https://www.youtube.com/watch?v=${videoId}`
-
-            fetch(`https://noembed.com/embed?url=${normalizedUrl}`)
-                .then(res => res.json())
-                .then(data => { if (data.title) setVideoTitle(data.title) })
-                .catch(() => { })
-        } else {
-            setVideoTitle('')
+            return
         }
-    }, [youtubeUrl, videoId])
+
+        // Reset states
+        setVideoTitle('')
+        setVideoDuration(0)
+
+        // Fetch title from noembed
+        const normalizedUrl = `https://www.youtube.com/watch?v=${videoId}`
+        fetch(`https://noembed.com/embed?url=${normalizedUrl}`)
+            .then(res => res.json())
+            .then(data => { if (data.title) setVideoTitle(data.title) })
+            .catch(() => { })
+
+        // Listen for messages from YouTube iframe
+        const handleMessage = (event) => {
+            if (event.origin !== 'https://www.youtube.com') return
+
+            try {
+                const data = JSON.parse(event.data)
+                if (data.event === 'infoDelivery' && data.info && data.info.duration) {
+                    console.log('YouTube iframe duration:', data.info.duration)
+                    setVideoDuration(data.info.duration)
+                }
+            } catch (e) {
+                // Ignore parse errors
+            }
+        }
+
+        window.addEventListener('message', handleMessage)
+
+        // Request info from iframe after a short delay to ensure it's loaded
+        const timer = setTimeout(() => {
+            if (iframeRef.current && iframeRef.current.contentWindow) {
+                iframeRef.current.contentWindow.postMessage(
+                    JSON.stringify({ event: 'listening' }),
+                    'https://www.youtube.com'
+                )
+            }
+        }, 1000)
+
+        return () => {
+            window.removeEventListener('message', handleMessage)
+            clearTimeout(timer)
+        }
+    }, [videoId])
 
 
     return (
@@ -321,13 +365,16 @@ function GetClips() {
                         {/* 2. Video Preview */}
                         <div className="w-full aspect-video bg-gray-900 rounded-2xl shadow-2xl overflow-hidden relative max-w-3xl ring-4 ring-gray-100">
                             {videoId ? (
-                                <iframe
-                                    className="w-full h-full"
-                                    src={`https://www.youtube.com/embed/${videoId}`}
-                                    title="YouTube video player"
-                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                                    allowFullScreen
-                                ></iframe>
+                                <div className="w-full h-full relative">
+                                    <iframe
+                                        ref={iframeRef}
+                                        className="w-full h-full"
+                                        src={`https://www.youtube.com/embed/${videoId}?enablejsapi=1&origin=${window.location.origin}`}
+                                        title="YouTube video player"
+                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                        allowFullScreen
+                                    ></iframe>
+                                </div>
                             ) : (
                                 <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400 bg-gray-800">
                                     <svg className="w-16 h-16 mb-4 opacity-30" fill="currentColor" viewBox="0 0 24 24"><path d="M19.615 3.184c-3.604-.246-11.631-.245-15.23 0-3.897.266-4.356 2.62-4.385 8.816.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0 3.897-.266 4.356-2.62 4.385-8.816-.029-6.185-.484-8.549-4.385-8.816zm-10.615 12.816v-8l8 3.993-8 4.007z" /></svg>
@@ -409,8 +456,8 @@ function GetClips() {
                                             Edit Speed
                                         </button>
                                         <button
-                                            onClick={() => handleDownload(results.p720.url, '720p')}
-                                            disabled={!results.p720.url || isDownloading}
+                                            onClick={() => handleDownload(results.p720.id, '720p')}
+                                            disabled={!results.p720.id || isDownloading}
                                             className="flex-1 md:flex-none px-6 py-2 bg-orange-500 text-white font-bold rounded-lg hover:bg-orange-600 transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
                                             {isDownloading ? '...' : 'Download'}
@@ -437,8 +484,8 @@ function GetClips() {
                                             Edit Speed
                                         </button>
                                         <button
-                                            onClick={() => handleDownload(results.p480.url, '480p')}
-                                            disabled={!results.p480.url || isDownloading}
+                                            onClick={() => handleDownload(results.p480.id, '480p')}
+                                            disabled={!results.p480.id || isDownloading}
                                             className="flex-1 md:flex-none px-6 py-2 bg-orange-500 text-white font-bold rounded-lg hover:bg-orange-600 transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
                                             {isDownloading ? '...' : 'Download'}

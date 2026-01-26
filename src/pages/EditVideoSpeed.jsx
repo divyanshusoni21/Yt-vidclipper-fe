@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import Header from '../components/Header'
 import Footer from '../components/Footer'
 import { initiateSpeedEdit, getSpeedEditStatus } from '../api/clipService'
-import { projectName } from '../config'
+import { projectName, API_BASE_URL } from '../config'
 
 function EditVideoSpeed() {
     const location = useLocation()
@@ -86,7 +86,10 @@ function EditVideoSpeed() {
 
                         // Trigger Download via Blob to force download prompt
                         try {
-                            const response = await fetch(task.output_video)
+                            const response = await fetch(`${API_BASE_URL}/api/download-clip/${task.id}/?file_type=speed_edit`)
+                            if (!response.ok) {
+                                throw new Error('Failed to download clip')
+                            }
                             const blob = await response.blob()
                             const url = window.URL.createObjectURL(blob)
                             const a = document.createElement('a')
