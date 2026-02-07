@@ -140,6 +140,11 @@ function EditVideoSpeed() {
         return () => { if (pollingRef.current) clearInterval(pollingRef.current) }
     }, [])
 
+    // Scroll to top on mount (fixes redirect landing at footer when navigating from GetClips)
+    useEffect(() => {
+        window.scrollTo(0, 0)
+    }, [])
+
     const onLoadedMetadata = () => {
         if (videoRef.current) {
             setDuration(videoRef.current.duration)

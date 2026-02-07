@@ -99,7 +99,7 @@ const LandingPageV2 = () => {
                                 </div>
                                 <h3 className="text-2xl font-bold mb-4 text-gray-800">The Problem</h3>
                                 <p className="text-gray-600 text-lg leading-relaxed mb-6">
-                                    You watch a fantastic 2-hour podcast and find a hilarious <span className="font-semibold text-gray-900">30-second moment</span>. You want to share it, but no one actually clicks or opens <span className="font-semibold text-gray-900">timestamped links</span>, and screen recording is low quality.
+                                    You watch a fantastic 2-hour podcast and find a hilarious or knowledge-worthy <span className="font-semibold text-gray-900">30/60-second moment</span>. You want to share it, but no one actually clicks or opens <span className="font-semibold text-gray-900">timestamped links</span>, and screen recording is hassle.
                                 </p>
                                 <div className="h-1 w-20 bg-red-200 rounded-full"></div>
                             </div>
