@@ -27,10 +27,18 @@ function EditVideoSpeed() {
     const [isProcessing, setIsProcessing] = useState(false)
     const [processStatus, setProcessStatus] = useState(null) // 'pending' | 'completed' | 'failed'
 
+    const MAX_VIDEO_SIZE_MB = 50
+    const MAX_VIDEO_SIZE_BYTES = MAX_VIDEO_SIZE_MB * 1024 * 1024
+
     // Handle Local File Upload
     const handleFileChange = (e) => {
         const file = e.target.files[0]
         if (file) {
+            if (file.size > MAX_VIDEO_SIZE_BYTES) {
+                alert(`Video size must not exceed ${MAX_VIDEO_SIZE_MB}MB. Your file is ${(file.size / (1024 * 1024)).toFixed(1)}MB.`)
+                e.target.value = ''
+                return
+            }
             if (previewUrl) URL.revokeObjectURL(previewUrl)
             setLocalFile(file)
             setRemoteVideoUrl(null)
@@ -199,7 +207,7 @@ function EditVideoSpeed() {
                                 ref={fileInputRef}
                                 onChange={handleFileChange}
                                 className="hidden"
-                                accept="video/*"
+                                accept="video/*,.mkv,video/x-matroska"
                             />
                             <div className="w-16 h-16 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
                                 <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -207,7 +215,7 @@ function EditVideoSpeed() {
                                 </svg>
                             </div>
                             <h3 className="text-xl font-bold text-gray-700">Click to Upload Video</h3>
-                            <p className="text-gray-400 mt-2">MP4, WebM or Ogg</p>
+                            <p className="text-gray-400 mt-2">MP4, WebM, MKV or Ogg (max {MAX_VIDEO_SIZE_MB}MB)</p>
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in duration-500">

@@ -148,7 +148,7 @@ const LandingPageV2 = () => {
             </section>
 
             {/* How It Works Section */}
-            <section className="py-20 bg-white">
+            <section id="how-it-works" className="py-20 bg-white">
                 <div className="container mx-auto px-6">
                     <div className="text-center mb-16">
                         <h2 className="text-3xl md:text-4xl font-bold mb-4">How It Works</h2>
@@ -185,7 +185,7 @@ const LandingPageV2 = () => {
             </section>
 
             {/* Bento Grid Features Section */}
-            <section className="py-24 bg-white">
+            <section id="features" className="py-24 bg-white">
                 <div className="container mx-auto px-6">
                     <div className="text-center max-w-3xl mx-auto mb-16">
                         <h2 className="text-4xl md:text-5xl font-bold mb-6 tracking-tight">Designed for Modern Creators</h2>
