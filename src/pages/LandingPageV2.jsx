@@ -99,7 +99,7 @@ const LandingPageV2 = () => {
                                 </div>
                                 <h3 className="text-2xl font-bold mb-4 text-gray-800">The Problem</h3>
                                 <p className="text-gray-600 text-lg leading-relaxed mb-6">
-                                    You watch a fantastic 2-hour podcast and find a hilarious <span className="font-semibold text-gray-900">30-second moment</span>. You want to share it, but no one actually clicks or opens <span className="font-semibold text-gray-900">timestamped links</span>, and screen recording is low quality.
+                                    You watch a fantastic 2-hour podcast and find a hilarious or knowledge-worthy <span className="font-semibold text-gray-900">30/60-second moment</span>. You want to share it, but no one actually clicks or opens <span className="font-semibold text-gray-900">timestamped links</span>, and screen recording is hassle.
                                 </p>
                                 <div className="h-1 w-20 bg-red-200 rounded-full"></div>
                             </div>
@@ -148,7 +148,7 @@ const LandingPageV2 = () => {
             </section>
 
             {/* How It Works Section */}
-            <section className="py-20 bg-white">
+            <section id="how-it-works" className="py-20 bg-white">
                 <div className="container mx-auto px-6">
                     <div className="text-center mb-16">
                         <h2 className="text-3xl md:text-4xl font-bold mb-4">How It Works</h2>
@@ -185,7 +185,7 @@ const LandingPageV2 = () => {
             </section>
 
             {/* Bento Grid Features Section */}
-            <section className="py-24 bg-white">
+            <section id="features" className="py-24 bg-white">
                 <div className="container mx-auto px-6">
                     <div className="text-center max-w-3xl mx-auto mb-16">
                         <h2 className="text-4xl md:text-5xl font-bold mb-6 tracking-tight">Designed for Modern Creators</h2>

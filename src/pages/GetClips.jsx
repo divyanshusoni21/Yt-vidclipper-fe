@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { createClipRequest, getClipTaskStatus, sendClipToEmail } from '../api/clipService'
+import { createClipRequest, getClipTaskStatus, sendClipToEmail, cancelRequest } from '../api/clipService'
 import { useLocation, useNavigate } from 'react-router-dom'
 import Header from '../components/Header'
 import Footer from '../components/Footer'
@@ -22,9 +22,16 @@ function GetClips() {
 
     // API State
     const [isProcessing, setIsProcessing] = useState(false)
-    const [clipRequestId, setClipRequestId] = useState(() => sessionStorage.getItem('clipRequestId'))
-    const [clipStatus, setClipStatus] = useState(() => sessionStorage.getItem('clipStatus'))
+    const [clipRequestId, setClipRequestId] = useState(() => {
+        if (sessionStorage.getItem('clipStatus') === 'cancelled') return null;
+        return sessionStorage.getItem('clipRequestId');
+    })
+    const [clipStatus, setClipStatus] = useState(() => {
+        const saved = sessionStorage.getItem('clipStatus');
+        return saved === 'cancelled' ? null : saved;
+    })
     const [processStartTime, setProcessStartTime] = useState(() => {
+        if (sessionStorage.getItem('clipStatus') === 'cancelled') return null;
         const saved = sessionStorage.getItem('processStartTime')
         return saved ? parseInt(saved, 10) : null
     })
@@ -198,7 +205,7 @@ function GetClips() {
             } catch (err) { console.error(err) }
         }
 
-        if (clipRequestId && clipStatus !== 'completed' && clipStatus !== 'failed') {
+        if (clipRequestId && clipStatus !== 'completed' && clipStatus !== 'failed' && clipStatus !== 'cancelled') {
             setIsProcessing(true) // Resume processing state if page reloaded/navigated back
             // First check
             checkStatus()
@@ -239,6 +246,40 @@ function GetClips() {
             alert('Failed to download clip.')
         } finally {
             setIsDownloading(false)
+        }
+    }
+
+    const [isCancelling, setIsCancelling] = useState(false)
+
+
+    const handleCancelRequest = async () => {
+        if (!clipRequestId) return
+        setIsCancelling(true)
+        try {
+            await cancelRequest(clipRequestId, 'clip_request')
+
+            // Stop polling immediately
+            if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current)
+
+            // Show cancelled state briefly
+            setClipStatus('cancelled')
+
+            // Delay resetting UI to show the "Cancelled" animation/feedback
+            setTimeout(() => {
+                setClipStatus(null)
+                setClipRequestId(null)
+                setProcessStartTime(null)
+                setIsProcessing(false)
+                setIsCancelling(false)
+                setResults({ p720: { url: null, size: null, id: null }, p480: { url: null, size: null, id: null } })
+                // Clear validation errors if any (optional)
+                set_errors({})
+            }, 1000) // 1s delay
+
+        } catch (error) {
+            console.error("Cancel failed", error)
+            alert("Failed to cancel request: " + (error.message || "Unknown error"))
+            setIsCancelling(false)
         }
     }
 
@@ -415,14 +456,48 @@ function GetClips() {
                             </div>
 
                             {/* Action Button */}
-                            <div className="w-full lg:w-auto pt-8 lg:pt-0">
+                            <div className="w-full lg:w-auto pt-8 lg:pt-0 flex flex-col items-center gap-3">
                                 <button
                                     onClick={handleGenerateClip}
-                                    disabled={isProcessing}
-                                    className={`w-full lg:w-48 py-5 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-2xl shadow-xl hover:shadow-orange-500/40 transition-all transform hover:scale-105 active:scale-95 text-xl ${isProcessing ? 'opacity-75 cursor-wait' : ''}`}
+                                    disabled={isProcessing || isCancelling || clipStatus === 'cancelled'}
+                                    className={`relative overflow-hidden w-full lg:w-48 py-5 font-bold rounded-2xl shadow-xl transition-all transform hover:scale-105 active:scale-95 text-xl flex items-center justify-center gap-2 
+                                    ${(isCancelling || clipStatus === 'cancelled')
+                                            ? 'bg-red-50 text-red-500 border-2 border-red-100 cursor-default shadow-none scale-100'
+                                            : isProcessing
+                                                ? 'bg-orange-500 text-white opacity-90 cursor-wait'
+                                                : 'bg-orange-500 hover:bg-orange-600 text-white hover:shadow-orange-500/40'
+                                        }`}
                                 >
-                                    {isProcessing ? 'Processing... ' : 'Get Clips'}
+                                    {(isCancelling || clipStatus === 'cancelled') ? (
+                                        <span className="animate-pulse flex items-center gap-2">
+                                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                                            Cancelling...
+                                        </span>
+                                    ) : isProcessing ? (
+                                        <>
+                                            <svg className="animate-spin h-6 w-6 text-white flex-shrink-0" fill="none" viewBox="0 0 24 24">
+                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                            </svg>
+                                            Processing...
+                                        </>
+                                    ) : (
+                                        'Get Clips'
+                                    )}
                                 </button>
+
+                                {/* Cancel Link - Only visible when processing and NOT already cancelling */}
+                                {isProcessing && !isCancelling && clipStatus !== 'cancelled' && (
+                                    <button
+                                        onClick={handleCancelRequest}
+                                        className="text-sm text-gray-400 hover:text-red-500 font-medium transition-colors flex items-center gap-1 py-1 px-3 rounded-full hover:bg-red-50"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                        Cancel request
+                                    </button>
+                                )}
                             </div>
                         </div>
 
@@ -433,8 +508,8 @@ function GetClips() {
                             </div>
                         )}
 
-                        {/* Row 2 & 3: Results (Only show if completed or processing) */}
-                        {(clipStatus === 'completed' || isProcessing) && (
+                        {/* Row 2 & 3: Results (Only show if completed or processing, and not cancelled) */}
+                        {(clipStatus === 'completed' || (isProcessing && clipStatus !== 'cancelled')) && (
                             <div className="border-t border-gray-100 pt-8 space-y-4 animate-in fade-in duration-700">
 
                                 {/* 720p Card */}
