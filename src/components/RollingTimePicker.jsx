@@ -3,14 +3,34 @@ import { useEffect, useRef, useState } from 'react'
 const RollingColumn = ({ range, value, onChange, label }) => {
     const scrollRef = useRef(null)
     const itemHeight = 36 // Compact height
+    const isScrollingRef = useRef(false)
 
     // Handle scroll to snap to nearest item
     const handleScroll = () => {
-        if (scrollRef.current) {
+        if (scrollRef.current && !isScrollingRef.current) {
             const scrollTop = scrollRef.current.scrollTop
             const index = Math.round(scrollTop / itemHeight)
             if (range[index] !== undefined && range[index] !== value) {
                 onChange(range[index])
+            }
+        }
+    }
+
+    // Handle click on item to scroll to it
+    const handleItemClick = (num) => {
+        if (scrollRef.current) {
+            const index = range.indexOf(num)
+            if (index !== -1) {
+                isScrollingRef.current = true
+                scrollRef.current.scrollTo({
+                    top: index * itemHeight,
+                    behavior: 'smooth'
+                })
+                onChange(num)
+                // Reset the flag after scroll completes
+                setTimeout(() => {
+                    isScrollingRef.current = false
+                }, 300)
             }
         }
     }
@@ -90,7 +110,7 @@ const RollingColumn = ({ range, value, onChange, label }) => {
                                     textShadow: isSelected ? '0 1px 8px rgba(139, 92, 246, 0.3)' : 'none',
                                     transform: isSelected ? 'scale(1.05)' : 'scale(1)',
                                 }}
-                                onClick={() => onChange(num)}
+                                onClick={() => handleItemClick(num)}
                             >
                                 {num.toString().padStart(2, '0')}
                             </div>
@@ -112,32 +132,6 @@ const RollingTimePicker = ({ value, onChange }) => {
     const m = parseInt(timeParts[1] || '0') || 0
     const s = parseInt(timeParts[2] || '0') || 0
 
-    const [manualValue, setManualValue] = useState(value)
-
-    useEffect(() => {
-        setManualValue(value)
-    }, [value])
-
-    const handleManualChange = (e) => {
-        const val = e.target.value.replace(/[^0-9:]/g, '')
-        setManualValue(val)
-
-        // Only propagate if it looks like a valid time or is being typed
-        if (/^\d{1,2}:\d{1,2}:\d{1,2}$/.test(val)) {
-            const [mh, mm, ms] = val.split(':').map(n => parseInt(n) || 0)
-            // Clamp values
-            const clampedH = Math.min(23, mh)
-            const clampedM = Math.min(59, mm)
-            const clampedS = Math.min(59, ms)
-            onChange(`${clampedH.toString().padStart(2, '0')}:${clampedM.toString().padStart(2, '0')}:${clampedS.toString().padStart(2, '0')}`)
-        }
-    }
-
-    const handleBlur = () => {
-        // Enforce format on blur
-        onChange(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`)
-    }
-
     // Ranges
     const hours = Array.from({ length: 24 }, (_, i) => i) // 0-23
     const minutes = Array.from({ length: 60 }, (_, i) => i) // 0-59
@@ -153,9 +147,9 @@ const RollingTimePicker = ({ value, onChange }) => {
     }
 
     return (
-        <div className="relative group flex flex-col items-center pb-8">
+        <div className="relative flex flex-col items-center">
             <div
-                className="inline-flex items-center gap-2 p-4 rounded-2xl relative overflow-hidden transition-all duration-300 group-hover:shadow-2xl group-hover:-translate-y-1"
+                className="inline-flex items-center gap-2 p-4 rounded-2xl relative overflow-hidden transition-all duration-300 hover:shadow-2xl hover:-translate-y-1"
                 style={{
                     background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(249, 250, 251, 0.95) 100%)',
                     backdropFilter: 'blur(20px)',
@@ -218,18 +212,6 @@ const RollingTimePicker = ({ value, onChange }) => {
 
                 {/* Bottom line indicator */}
                 <div className="absolute bottom-0 left-0 right-0 h-[1.5px] bg-gradient-to-r from-transparent via-purple-300/30 to-transparent" />
-            </div>
-
-            {/* Manual Text Input - Outside the overflow-hidden container */}
-            <div className="absolute -bottom-6 left-0 right-0 px-2 transition-all duration-300 opacity-0 transform translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 group-focus-within:opacity-100 group-focus-within:translate-y-0">
-                <input
-                    type="text"
-                    value={manualValue}
-                    onChange={handleManualChange}
-                    onBlur={handleBlur}
-                    placeholder="HH:MM:SS"
-                    className="w-full bg-white/90 backdrop-blur-md border border-purple-200 rounded-lg py-1.5 text-center font-mono text-xs text-purple-700 shadow-lg focus:ring-4 focus:ring-purple-500/10 outline-none transition-all"
-                />
             </div>
         </div>
     )

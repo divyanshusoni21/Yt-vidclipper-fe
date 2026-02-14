@@ -74,7 +74,7 @@ function GetClips() {
         if (e <= s) return 'End time must be greater than start time'
         if (videoDuration > 0 && e > videoDuration) return 'End time exceeds video duration'
         if (duration < 5) return 'Clip duration must be at least 5 seconds'
-        if (duration > 600) return 'Clip duration cannot exceed 10 minutes'
+        if (duration > 300) return 'Clip duration cannot exceed 5 minutes'
 
         return ''
     }
@@ -136,8 +136,12 @@ function GetClips() {
         if (!youtubeUrl) { set_errors({ youtubeUrl: 'Required' }); return }
         // startTime and endTime are always valid format from picker
 
-        const logicErr = validate_logic(startTime, endTime)
-        if (logicErr) { set_errors({ logic: logicErr }); return }
+        // Trigger validation display and check for errors
+        const validationError = validate_logic(startTime, endTime)
+        if (validationError) {
+            set_errors({ logic: validationError })
+            return
+        }
 
         setIsProcessing(true)
         setClipStatus('pending')
@@ -274,7 +278,7 @@ function GetClips() {
                 setResults({ p720: { url: null, size: null, id: null }, p480: { url: null, size: null, id: null } })
                 // Clear validation errors if any (optional)
                 set_errors({})
-            }, 1000) // 1s delay
+            }, 100) // 0.1s delay
 
         } catch (error) {
             console.error("Cancel failed", error)
