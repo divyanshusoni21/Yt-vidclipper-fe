@@ -111,3 +111,29 @@ export const getSpeedEditStatus = async (requestId) => {
 
     return response.json();
 };
+
+/**
+ * Cancels a request.
+ * @param {string} requestId 
+ * @param {string} requestType - 'clip_request' or 'speed_edit'
+ * @returns {Promise<Object>}
+ */
+export const cancelRequest = async (requestId, requestType) => {
+    const response = await fetch(`${API_BASE_URL}/api/cancel-request/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            request_type: requestType,
+            request_id: requestId
+        }),
+    });
+
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to cancel request');
+    }
+
+    return response.json();
+};
