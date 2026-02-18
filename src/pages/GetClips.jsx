@@ -374,7 +374,7 @@ function GetClips() {
 
             {/* TOP CONTAINER: Input & Preview */}
             <section className="pt-28 pb-12 bg-white border-b border-gray-200">
-                <div className="container mx-auto px-6 max-w-4xl">
+                <div className="container mx-auto px-4 sm:px-6 max-w-4xl">
                     <div className="flex flex-col items-center space-y-8">
 
                         {/* 1. Enhanced YouTube URL Input */}
@@ -392,19 +392,19 @@ function GetClips() {
                                     type="text"
                                     value={youtubeUrl}
                                     onChange={(e) => set_youtube_url(e.target.value)}
-                                    className="w-full pl-16 pr-28 py-5 text-lg bg-transparent border-0 outline-none focus:ring-0 placeholder-gray-400 text-gray-800 font-medium"
+                                    className="w-full min-w-0 pl-14 sm:pl-16 pr-20 sm:pr-28 py-4 sm:py-5 text-base sm:text-lg bg-transparent border-0 outline-none focus:ring-0 placeholder-gray-400 text-gray-800 font-medium"
                                     placeholder="Paste your YouTube link here..."
                                 />
                                 <button
                                     onClick={async () => {
                                         try { const text = await navigator.clipboard.readText(); set_youtube_url(text) } catch (err) { }
                                     }}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 px-5 py-2 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl hover:shadow-lg hover:shadow-orange-500/20 hover:scale-105 transition-all duration-200 text-sm"
+                                    className="absolute right-2 sm:right-3 top-1/2 -translate-y-1/2 px-3 sm:px-5 py-2 min-h-[44px] flex items-center bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl hover:shadow-lg hover:shadow-orange-500/20 hover:scale-105 transition-all duration-200 text-xs sm:text-sm"
                                 >
                                     📋 Paste
                                 </button>
                             </div>
-                            {errors.youtubeUrl && <p className="absolute -bottom-7 left-0 right-0 text-center text-sm text-red-500 font-medium animate-bounce">{errors.youtubeUrl}</p>}
+                            {errors.youtubeUrl && <p className="mt-2 text-center text-sm text-red-500 font-medium animate-bounce">{errors.youtubeUrl}</p>}
                         </div>
 
                         {/* 2. Video Preview */}
@@ -440,12 +440,12 @@ function GetClips() {
 
             {/* BOTTOM CONTAINER: Controls & Results */}
             <section className="flex-grow py-12 bg-gray-50">
-                <div className="container mx-auto px-6 max-w-6xl">
-                    <div className="bg-white rounded-3xl shadow-xl p-8 border border-gray-100 space-y-12">
+                <div className="container mx-auto px-4 sm:px-6 max-w-6xl">
+                    <div className="bg-white rounded-3xl shadow-xl p-4 sm:p-6 md:p-8 border border-gray-100 space-y-8 sm:space-y-12">
 
                         {/* Row 1: Controls with Rolling Pickers */}
-                        <div className="flex flex-col lg:flex-row items-center justify-between gap-8 lg:gap-12">
-                            <div className="flex flex-col lg:flex-row items-center gap-16 lg:gap-24">
+                        <div className="flex flex-col lg:flex-row items-center justify-between gap-6 sm:gap-8 lg:gap-12">
+                            <div className="flex flex-col lg:flex-row items-center gap-8 sm:gap-12 lg:gap-24">
                                 {/* Start Time */}
                                 <div className="flex flex-col items-center">
                                     <label className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-3">Start Time</label>

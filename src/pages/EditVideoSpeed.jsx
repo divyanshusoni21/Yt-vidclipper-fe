@@ -216,7 +216,7 @@ function EditVideoSpeed() {
         <button
             onClick={() => handleSpeedChange(val)}
             disabled={isProcessing}
-            className={`px-4 py-2 rounded-lg font-bold transition-all transform hover:scale-105 ${speed === val
+            className={`min-h-[44px] px-4 py-2.5 sm:py-2 rounded-lg font-bold transition-all transform hover:scale-105 ${speed === val
                 ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/30'
                 : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50'
                 } disabled:opacity-50`}
@@ -229,11 +229,11 @@ function EditVideoSpeed() {
         <div className="min-h-screen flex flex-col font-sans bg-gray-50 text-gray-900 overflow-x-hidden">
             <Header />
 
-            <main className="flex-grow pt-28 pb-12 px-6">
+            <main className="flex-grow pt-28 pb-12 px-4 sm:px-6">
                 <div className="container mx-auto max-w-5xl">
 
-                    <div className="text-center mb-10">
-                        <h1 className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-orange-600 to-red-600 mb-2">
+                    <div className="text-center mb-8 sm:mb-10">
+                        <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-orange-600 to-red-600 mb-2">
                             Video Speed Editor
                         </h1>
                     </div>
