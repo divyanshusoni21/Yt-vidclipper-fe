@@ -25,7 +25,7 @@ const Logo = ({ className = "" }) => {
                     </span>
                 </div>
             </div>
-            <span className="text-2xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-600">
+            <span className="text-lg sm:text-2xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-600">
                 {projectName}
             </span>
         </div>

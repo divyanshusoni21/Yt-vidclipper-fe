@@ -23,7 +23,7 @@ function Footer() {
   return (
     <footer className="bg-gray-900 text-white mt-auto">
       <div className="container mx-auto px-4 py-8 md:py-12">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12">
           <div className="space-y-6">
             <Logo className="invert brightness-200" />
             <p className="text-gray-400 text-lg leading-relaxed">

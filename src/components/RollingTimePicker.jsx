@@ -46,7 +46,7 @@ const RollingColumn = ({ range, value, onChange, label }) => {
     }, [value, range])
 
     return (
-        <div className="flex flex-col items-center gap-1.5">
+        <div className="flex flex-col items-center min-w-0 max-w-full gap-1.5">
             <span className="text-[10px] font-bold tracking-wider bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent uppercase">
                 {label}
             </span>
@@ -147,9 +147,9 @@ const RollingTimePicker = ({ value, onChange }) => {
     }
 
     return (
-        <div className="relative flex flex-col items-center">
+        <div className="relative flex flex-col items-center min-w-0 max-w-full">
             <div
-                className="inline-flex items-center gap-2 p-4 rounded-2xl relative overflow-hidden transition-all duration-300 hover:shadow-2xl hover:-translate-y-1"
+                className="inline-flex items-center gap-1 sm:gap-2 p-3 sm:p-4 rounded-2xl relative overflow-hidden transition-all duration-300 hover:shadow-2xl hover:-translate-y-1"
                 style={{
                     background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(249, 250, 251, 0.95) 100%)',
                     backdropFilter: 'blur(20px)',
