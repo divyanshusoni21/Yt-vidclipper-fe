@@ -1,8 +1,32 @@
 @import "tailwindcss";
-html {
-    scroll-behavior: smooth;
+
+@theme {
+    --font-sans: "Plus Jakarta Sans Variable", ui-sans-serif, system-ui, sans-serif;
+    --font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, monospace;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    html {
+        scroll-behavior: smooth;
+    }
 }
 
 button {
     cursor: pointer;
+}
+
+/* Consistent accessible keyboard focus indicator across all interactive controls. */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+    outline: 2px solid #2563eb;
+    outline-offset: 2px;
+}
+
+/* Utility used by RollingTimePicker columns to keep scrollbars visually clean. */
+.scrollbar-hide::-webkit-scrollbar {
+    display: none;
+}
+
+.scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
 }

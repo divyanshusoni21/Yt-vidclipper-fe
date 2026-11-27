@@ -1,382 +1,591 @@
-import { useState, useRef, useEffect } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useState, useRef, useEffect, useId } from 'react'
+import { useLocation } from 'react-router-dom'
+import {
+    Check,
+    CheckCircle,
+    CircleNotch,
+    ClockCountdown,
+    DownloadSimple,
+    Gauge,
+    LinkSimple,
+    Trash,
+    UploadSimple,
+    WarningCircle,
+    X,
+} from '@phosphor-icons/react'
 import Header from '../components/Header'
 import Footer from '../components/Footer'
-import { initiateSpeedEdit, getSpeedEditStatus, cancelRequest } from '../api/clipService'
-import { projectName, API_BASE_URL } from '../config'
+import RateLimitBanner from '../components/RateLimitBanner'
+import {
+    ApiError,
+    cancelRequest,
+    downloadClipBlob,
+    getSpeedEditStatus,
+    initiateSpeedEdit,
+} from '../api/clipService'
+import { API_BASE_URL, CLIP_TIMEOUT_MS } from '../config'
+import { useRateLimitCooldown } from '../hooks/useRateLimitCooldown'
+import {
+    copy_text_to_clipboard,
+    format_countdown,
+    format_duration,
+    get_speed_polling_interval,
+    resolve_media_url,
+} from '../utils/timeUtils'
 
+const MAX_VIDEO_SIZE_MB = 50
+const MAX_VIDEO_SIZE_BYTES = MAX_VIDEO_SIZE_MB * 1024 * 1024
+const SPEED_PRESETS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2]
+
+/**
+ * Standalone speed editor page for uploading a local video or editing an existing clip.
+ */
 function EditVideoSpeed() {
     const location = useLocation()
-    const navigate = useNavigate()
+    const sliderId = useId()
 
-    // State from Navigation
     const [remoteVideoUrl, setRemoteVideoUrl] = useState(location.state?.videoUrl || null)
     const sourceClipId = location.state?.clipId || null
-    const resolution = location.state?.resolution || 'video'
 
-    // States for Video Source
     const [localFile, setLocalFile] = useState(null)
     const [previewUrl, setPreviewUrl] = useState(null)
 
-    // Playback States
     const videoRef = useRef(null)
     const fileInputRef = useRef(null)
     const pollingRef = useRef(null)
-    const [speed, setSpeed] = useState(1.0)
+    const activeRequestIdRef = useRef(null)
+    const cancelledRef = useRef(false)
+
+    const [speed, setSpeed] = useState(1.25)
     const [duration, setDuration] = useState(0)
     const [isProcessing, setIsProcessing] = useState(false)
-    const [processStatus, setProcessStatus] = useState(() => {
-        const saved = sessionStorage.getItem('speedEditStatus');
-        return saved === 'cancelled' ? null : saved;
-    }) // 'pending' | 'completed' | 'failed' | 'cancelled'
     const [isCancelling, setIsCancelling] = useState(false)
-    const currentRequestIdRef = useRef(sessionStorage.getItem('speedEditRequestId'))
+    const [errorMessage, setErrorMessage] = useState('')
+    const [speedOutput, setSpeedOutput] = useState(null)
+    const [isDownloadingOutput, setIsDownloadingOutput] = useState(false)
+    const [copyState, setCopyState] = useState('idle')
 
-    const MAX_VIDEO_SIZE_MB = 50
-    const MAX_VIDEO_SIZE_BYTES = MAX_VIDEO_SIZE_MB * 1024 * 1024
+    const speedRateLimit = useRateLimitCooldown('speedEditRateLimitUntil')
 
-    // Handle Local File Upload
-    const handleFileChange = (e) => {
-        const file = e.target.files[0]
-        if (file) {
-            if (file.size > MAX_VIDEO_SIZE_BYTES) {
-                alert(`Video size must not exceed ${MAX_VIDEO_SIZE_MB}MB. Your file is ${(file.size / (1024 * 1024)).toFixed(1)}MB.`)
-                e.target.value = ''
-                return
-            }
-            if (previewUrl) URL.revokeObjectURL(previewUrl)
-            setLocalFile(file)
-            setRemoteVideoUrl(null)
-            const url = URL.createObjectURL(file)
-            setPreviewUrl(url)
-            setSpeed(1.0)
-            setProcessStatus(null)
+    const activeVideoUrl = remoteVideoUrl
+        ? resolve_media_url(remoteVideoUrl, API_BASE_URL)
+        : previewUrl
+    const formattedSpeed = parseFloat(speed.toFixed(2))
+    const finalDuration = duration > 0 ? duration / speed : 0
+
+    const clear_polling = () => {
+        if (pollingRef.current) {
+            clearInterval(pollingRef.current)
+            pollingRef.current = null
         }
     }
 
-    // Handle Speed Change
-    const handleSpeedChange = (newSpeed) => {
-        setSpeed(newSpeed)
-        if (videoRef.current) {
-            videoRef.current.playbackRate = newSpeed
-        }
-    }
-
-    // Helper: Dynamic Polling Interval
-    const getPollingInterval = (sizeMB) => {
-        if (!sizeMB || sizeMB < 1) return 1500
-        if (sizeMB < 5) return 2500
-        if (sizeMB < 15) return 4000
-        return 7000
-    }
-
-    // API Integration: Apply Speed & Download
-    const handleApplyAndDownload = async () => {
-        if (!remoteVideoUrl && !localFile) return
-
-        setIsProcessing(true)
-        setProcessStatus('pending')
-
-        try {
-            // 1. Initiate the Task
-            const initialTask = await initiateSpeedEdit({
-                speed_factor: speed,
-                source_clip: sourceClipId, // Only used if remoteVideoUrl exists
-                uploaded_video: localFile  // Only used if local selection
-            })
-
-            const requestId = initialTask.id
-            currentRequestIdRef.current = requestId
-            sessionStorage.setItem('speedEditRequestId', requestId)
-            sessionStorage.setItem('speedEditStatus', 'pending')
-            const videoSize = initialTask.original_size || 0
-
-            // 2. Polling Logic
-            const pollStatus = async () => {
-                try {
-                    const task = await getSpeedEditStatus(requestId)
-
-                    if (processStatus === 'cancelled') {
-                        clearInterval(pollingRef.current)
-                        return
-                    }
-
-                    if (task.status === 'completed') {
-                        setIsProcessing(false)
-                        setProcessStatus('completed')
-
-                        // Trigger Download via Blob to force download prompt
-                        try {
-                            const response = await fetch(`${API_BASE_URL}/api/download-clip/${task.id}/?file_type=speed_edit`)
-                            if (!response.ok) {
-                                throw new Error('Failed to download clip')
-                            }
-                            const blob = await response.blob()
-                            const url = window.URL.createObjectURL(blob)
-                            const a = document.createElement('a')
-                            a.href = url
-                            a.download = `speed_edited_${parseFloat(speed.toFixed(2))}x.mp4`
-                            document.body.appendChild(a)
-                            a.click()
-                            document.body.removeChild(a)
-                            window.URL.revokeObjectURL(url)
-                        } catch (downloadErr) {
-                            console.error('Download prompt failed:', downloadErr)
-                            // Fallback
-                            const a = document.createElement('a')
-                            a.href = task.output_video
-                            a.download = `speed_edited_${parseFloat(speed.toFixed(2))}x.mp4`
-                            a.target = "_blank"
-                            document.body.appendChild(a)
-                            a.click()
-                            document.body.removeChild(a)
-                        }
-
-                        clearInterval(pollingRef.current)
-                    } else if (task.status === 'failed') {
-                        setIsProcessing(false)
-                        setProcessStatus('failed')
-                        alert(task.error_message || 'Processing failed.')
-                        clearInterval(pollingRef.current)
-                    }
-                } catch (err) {
-                    console.error('Polling error:', err)
-                }
-            }
-
-            // Set dynamic interval based on size
-            const interval = getPollingInterval(videoSize)
-            pollingRef.current = setInterval(pollStatus, interval)
-
-        } catch (error) {
-            console.error('Speed transformation initiation failed:', error)
-            alert(error.message || 'Failed to start processing. Please try again.')
-            setIsProcessing(false)
-            setProcessStatus(null)
-            sessionStorage.removeItem('speedEditStatus')
-            sessionStorage.removeItem('speedEditRequestId')
-        }
-    }
-
-    const handleCancelRequest = async () => {
-        if (!currentRequestIdRef.current) return
-        setIsCancelling(true)
-        try {
-            await cancelRequest(currentRequestIdRef.current, 'speed_edit')
-
-            if (pollingRef.current) clearInterval(pollingRef.current)
-
-            setProcessStatus('cancelled')
-            sessionStorage.setItem('speedEditStatus', 'cancelled')
-
-            setTimeout(() => {
-                setProcessStatus(null)
-                setIsProcessing(false)
-                setIsCancelling(false)
-                currentRequestIdRef.current = null
-                sessionStorage.removeItem('speedEditStatus')
-                sessionStorage.removeItem('speedEditRequestId')
-            }, 1000)
-        } catch (error) {
-            console.error("Cancel failed", error)
-            alert("Failed to cancel request: " + (error.message || "Unknown error"))
-            setIsCancelling(false)
-        }
-    }
-
-    // Cleanup interval on unmount
-    useEffect(() => {
-        return () => { if (pollingRef.current) clearInterval(pollingRef.current) }
-    }, [])
-
-    // Scroll to top on mount (fixes redirect landing at footer when navigating from GetClips)
     useEffect(() => {
         window.scrollTo(0, 0)
-    }, [])
+        return () => {
+            clear_polling()
+            if (previewUrl) URL.revokeObjectURL(previewUrl)
+        }
+    }, [previewUrl])
 
-    const onLoadedMetadata = () => {
+    useEffect(() => {
         if (videoRef.current) {
-            setDuration(videoRef.current.duration)
+            videoRef.current.playbackRate = speed
+        }
+    }, [speed, activeVideoUrl])
+
+    const handle_file_change = (e) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+
+        if (file.size > MAX_VIDEO_SIZE_BYTES) {
+            setErrorMessage(
+                `Video size must not exceed ${MAX_VIDEO_SIZE_MB}MB. Selected file is ${(file.size / (1024 * 1024)).toFixed(1)}MB.`
+            )
+            e.target.value = ''
+            return
+        }
+
+        if (previewUrl) URL.revokeObjectURL(previewUrl)
+        setErrorMessage('')
+        setSpeedOutput(null)
+        setLocalFile(file)
+        setRemoteVideoUrl(null)
+        setPreviewUrl(URL.createObjectURL(file))
+        setSpeed(1.25)
+        setDuration(0)
+    }
+
+    const handle_reset_video = () => {
+        clear_polling()
+        if (previewUrl) URL.revokeObjectURL(previewUrl)
+        setRemoteVideoUrl(null)
+        setLocalFile(null)
+        setPreviewUrl(null)
+        setDuration(0)
+        setIsProcessing(false)
+        setIsCancelling(false)
+        setErrorMessage('')
+        setSpeedOutput(null)
+        activeRequestIdRef.current = null
+    }
+
+    const handle_speed_change = (nextSpeed) => {
+        setSpeed(nextSpeed)
+        setErrorMessage('')
+        if (videoRef.current) {
+            videoRef.current.playbackRate = nextSpeed
+        }
+    }
+
+    const handle_loaded_metadata = () => {
+        if (videoRef.current) {
+            setDuration(videoRef.current.duration || 0)
             videoRef.current.playbackRate = speed
         }
     }
 
-    const finalDuration = duration / speed
-    const activeVideoUrl = remoteVideoUrl || previewUrl
+    const handle_apply_and_download = async () => {
+        if ((!remoteVideoUrl && !localFile) || formattedSpeed === 1 || speedRateLimit.isLimited) {
+            return
+        }
 
-    const formatTime = (seconds) => {
-        const h = Math.floor(seconds / 3600)
-        const m = Math.floor((seconds % 3600) / 60)
-        const s = Math.floor(seconds % 60)
-        if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
-        return `${m}:${s.toString().padStart(2, '0')}`
+        const submittedSpeed = formattedSpeed
+        cancelledRef.current = false
+        clear_polling()
+        speedRateLimit.clearRateLimit()
+        setErrorMessage('')
+        setSpeedOutput(null)
+        setCopyState('idle')
+        setIsProcessing(true)
+
+        try {
+            const initialTask = await initiateSpeedEdit({
+                speed_factor: submittedSpeed,
+                source_clip: sourceClipId,
+                uploaded_video: localFile,
+            })
+
+            if (cancelledRef.current) return
+
+            const requestId = initialTask.id
+            activeRequestIdRef.current = requestId
+            const startedAt = Date.now()
+            const intervalMs = get_speed_polling_interval(initialTask.original_size || 0)
+
+            const poll_status = async () => {
+                if (cancelledRef.current) {
+                    clear_polling()
+                    return
+                }
+
+                if (Date.now() - startedAt > CLIP_TIMEOUT_MS) {
+                    clear_polling()
+                    activeRequestIdRef.current = null
+                    setIsProcessing(false)
+                    setErrorMessage('Speed edit timed out after 5 minutes. Please try again.')
+                    return
+                }
+
+                try {
+                    const task = await getSpeedEditStatus(requestId)
+                    if (cancelledRef.current) {
+                        clear_polling()
+                        return
+                    }
+
+                    if (task.status === 'completed') {
+                        clear_polling()
+                        activeRequestIdRef.current = null
+                        setIsProcessing(false)
+                        setSpeedOutput({
+                            id: task.id,
+                            outputUrl: task.output_video,
+                            appliedSpeed: submittedSpeed,
+                            size: task.output_size ? `${task.output_size}MB` : null,
+                        })
+
+                        try {
+                            await downloadClipBlob(
+                                task.id,
+                                'speed_edit',
+                                `speed_edited_${submittedSpeed}x.mp4`
+                            )
+                        } catch {
+                            // Keep the ready bar visible so user can retry download or copy Share URL.
+                        }
+                    } else if (task.status === 'failed') {
+                        clear_polling()
+                        activeRequestIdRef.current = null
+                        setIsProcessing(false)
+                        setErrorMessage(task.error_message || 'Speed processing failed. Please try again.')
+                    } else if (task.status === 'cancelled') {
+                        clear_polling()
+                        activeRequestIdRef.current = null
+                        setIsProcessing(false)
+                    }
+                } catch (pollErr) {
+                    console.error('Polling error:', pollErr)
+                }
+            }
+
+            pollingRef.current = setInterval(poll_status, intervalMs)
+        } catch (err) {
+            setIsProcessing(false)
+            activeRequestIdRef.current = null
+
+            if (err instanceof ApiError && err.isRateLimited) {
+                speedRateLimit.triggerRateLimit(err.retryAfterSeconds, err.message)
+                return
+            }
+            setErrorMessage(err?.message || 'Failed to start processing. Please try again.')
+        }
     }
 
-    const SpeedButton = ({ val }) => (
-        <button
-            onClick={() => handleSpeedChange(val)}
-            disabled={isProcessing}
-            className={`min-h-[44px] px-4 py-2.5 sm:py-2 rounded-lg font-bold transition-all transform hover:scale-105 ${speed === val
-                ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/30'
-                : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50'
-                } disabled:opacity-50`}
-        >
-            {val}x
-        </button>
-    )
+    const handle_cancel_request = async () => {
+        if (!activeRequestIdRef.current) return
+        setIsCancelling(true)
+        cancelledRef.current = true
+        clear_polling()
+
+        try {
+            await cancelRequest(activeRequestIdRef.current, 'speed_edit')
+            activeRequestIdRef.current = null
+            setIsProcessing(false)
+            setIsCancelling(false)
+        } catch (err) {
+            setIsCancelling(false)
+            setErrorMessage(err?.message || 'Failed to cancel request.')
+        }
+    }
+
+    const handle_share_output = async () => {
+        if (!speedOutput?.outputUrl) return
+        const fullUrl = resolve_media_url(speedOutput.outputUrl, API_BASE_URL)
+        const ok = await copy_text_to_clipboard(fullUrl)
+        setCopyState(ok ? 'copied' : 'error')
+        setTimeout(() => setCopyState('idle'), 2500)
+    }
+
+    const handle_download_output = async () => {
+        if (!speedOutput?.id) return
+        setIsDownloadingOutput(true)
+        setErrorMessage('')
+        try {
+            await downloadClipBlob(
+                speedOutput.id,
+                'speed_edit',
+                `speed_edited_${speedOutput.appliedSpeed}x.mp4`
+            )
+        } catch (err) {
+            if (err instanceof ApiError && err.isRateLimited) {
+                speedRateLimit.triggerRateLimit(err.retryAfterSeconds, err.message)
+            } else {
+                setErrorMessage(err?.message || 'Failed to download speed-edited video.')
+            }
+        } finally {
+            setIsDownloadingOutput(false)
+        }
+    }
 
     return (
-        <div className="min-h-screen flex flex-col font-sans bg-gray-50 text-gray-900 overflow-x-hidden">
+        <div className="min-h-[100dvh] flex flex-col font-sans bg-zinc-50 text-zinc-950 overflow-x-hidden">
             <Header />
 
-            <main className="flex-grow pt-28 pb-12 px-4 sm:px-6">
-                <div className="container mx-auto max-w-5xl">
-
-                    <div className="text-center mb-8 sm:mb-10">
-                        <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-orange-600 to-red-600 mb-2">
+            <main className="flex-1 pt-24 pb-16 px-4 sm:px-6">
+                <div className="max-w-5xl mx-auto space-y-6">
+                    <div className="space-y-2">
+                        <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-zinc-950">
                             Video Speed Editor
                         </h1>
+                        <p className="text-zinc-600 text-base max-w-[65ch]">
+                            Upload a video, preview playback speed, and export with live duration estimates.
+                        </p>
                     </div>
 
-                    {!activeVideoUrl ? (
+                    {(speedRateLimit.isLimited || speedRateLimit.message) && (
+                        <RateLimitBanner
+                            message={speedRateLimit.message}
+                            remainingSeconds={speedRateLimit.remainingSeconds}
+                            onDismiss={speedRateLimit.clearRateLimit}
+                        />
+                    )}
+
+                    {errorMessage && (
                         <div
-                            onClick={() => fileInputRef.current.click()}
-                            className="max-w-2xl mx-auto aspect-video bg-white rounded-3xl border-4 border-dashed border-gray-200 flex flex-col items-center justify-center cursor-pointer hover:border-orange-400 hover:bg-orange-50/30 transition-all group"
+                            role="alert"
+                            className="bg-red-50 border border-red-200 text-red-800 rounded-xl px-4 py-3 text-sm font-medium flex items-start gap-2.5"
+                        >
+                            <WarningCircle
+                                size={18}
+                                weight="bold"
+                                aria-hidden="true"
+                                className="text-red-600 shrink-0 mt-0.5"
+                            />
+                            <span>{errorMessage}</span>
+                        </div>
+                    )}
+
+                    {!activeVideoUrl ? (
+                        <button
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            className="w-full max-w-2xl mx-auto aspect-video bg-white rounded-2xl border-2 border-dashed border-zinc-300 hover:border-blue-400 hover:bg-blue-50/30 flex flex-col items-center justify-center p-6 transition-colors group"
                         >
                             <input
                                 type="file"
                                 ref={fileInputRef}
-                                onChange={handleFileChange}
+                                onChange={handle_file_change}
                                 className="hidden"
                                 accept="video/*,.mkv,video/x-matroska"
                             />
-                            <div className="w-16 h-16 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
-                                </svg>
-                            </div>
-                            <h3 className="text-xl font-bold text-gray-700">Click to Upload Video</h3>
-                            <p className="text-gray-400 mt-2">MP4, WebM, MKV or Ogg (max {MAX_VIDEO_SIZE_MB}MB)</p>
-                        </div>
+                            <span className="w-14 h-14 bg-blue-50 text-blue-600 border border-blue-100 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-105 transition-transform">
+                                <UploadSimple size={26} weight="bold" aria-hidden="true" />
+                            </span>
+                            <span className="text-lg font-bold text-zinc-900">Click to upload video</span>
+                            <span className="text-sm text-zinc-500 mt-1">
+                                MP4, WebM, MKV or Ogg (max {MAX_VIDEO_SIZE_MB}MB)
+                            </span>
+                        </button>
                     ) : (
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in duration-500">
-                            <div className="lg:col-span-2 space-y-6">
-                                <div className="relative group rounded-3xl overflow-hidden shadow-2xl ring-4 ring-white">
-                                    <div className="absolute -inset-1 bg-gradient-to-r from-blue-500 to-purple-500 opacity-20 blur-lg group-hover:opacity-30 transition duration-500"></div>
-                                    <div className="relative bg-black aspect-video flex items-center justify-center">
-                                        <video
-                                            key={activeVideoUrl}
-                                            ref={videoRef}
-                                            src={activeVideoUrl}
-                                            className="w-full h-full object-contain"
-                                            controls
-                                            onLoadedMetadata={onLoadedMetadata}
-                                        />
-                                    </div>
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            <div className="lg:col-span-2 space-y-4">
+                                <div className="rounded-2xl overflow-hidden bg-zinc-950 border border-zinc-200 shadow-xs aspect-video flex items-center justify-center">
+                                    <video
+                                        key={activeVideoUrl}
+                                        ref={videoRef}
+                                        src={activeVideoUrl}
+                                        className="w-full h-full object-contain"
+                                        controls
+                                        onLoadedMetadata={handle_loaded_metadata}
+                                    />
                                 </div>
 
-                                <div className="flex justify-center">
+                                <div className="flex justify-center sm:justify-start">
                                     <button
-                                        onClick={() => { setRemoteVideoUrl(null); setLocalFile(null); setPreviewUrl(null); setProcessStatus(null); }}
-                                        className="text-sm font-semibold text-gray-400 hover:text-red-500 transition-colors flex items-center gap-2"
+                                        type="button"
+                                        onClick={handle_reset_video}
+                                        className="inline-flex items-center gap-2 text-sm font-medium text-zinc-600 hover:text-red-600 px-3 py-1.5 rounded-lg hover:bg-zinc-100 transition-colors"
                                     >
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                                        Remove & Upload Different Video
+                                        <Trash size={16} weight="bold" aria-hidden="true" />
+                                        Remove and upload different video
                                     </button>
                                 </div>
                             </div>
 
-                            <div className="space-y-6">
-                                <div className="bg-white rounded-3xl p-6 shadow-xl border border-gray-100">
-                                    <h3 className="text-gray-400 font-bold uppercase tracking-wider text-xs mb-4">Duration Preview</h3>
-                                    <div className="flex items-center justify-between mb-4">
-                                        <span className="text-gray-500 font-medium">Original</span>
-                                        <span className="text-xl font-bold text-gray-800">{formatTime(duration)}</span>
+                            <div className="space-y-4">
+                                {/* Duration Estimate Card */}
+                                <div className="bg-white rounded-2xl p-5 border border-zinc-200 space-y-3">
+                                    <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+                                        Duration Estimate
+                                    </h2>
+                                    <div className="flex items-center justify-between text-sm">
+                                        <span className="text-zinc-600">Original</span>
+                                        <span className="font-mono tabular-nums text-base font-semibold text-zinc-900">
+                                            {format_duration(duration)}
+                                        </span>
                                     </div>
-                                    <div className="flex items-center justify-between p-4 bg-orange-50 rounded-xl border border-orange-100">
-                                        <span className="text-orange-700 font-medium">New Duration</span>
-                                        <span className="text-2xl font-extrabold text-orange-600">{formatTime(finalDuration)}</span>
+                                    <div className="flex items-center justify-between p-3.5 bg-blue-50 rounded-xl border border-blue-200">
+                                        <span className="text-sm font-semibold text-blue-900">
+                                            Estimated total
+                                        </span>
+                                        <span className="font-mono tabular-nums text-xl font-bold text-blue-600">
+                                            {format_duration(finalDuration)}
+                                        </span>
                                     </div>
                                 </div>
 
-                                <div className="bg-white rounded-3xl p-6 shadow-xl border border-gray-100 space-y-6">
+                                {/* Speed Controls Card */}
+                                <div className="bg-white rounded-2xl p-5 border border-zinc-200 space-y-5">
                                     <div>
-                                        <div className="flex justify-between items-center mb-4">
-                                            <h3 className="text-gray-800 font-bold text-lg">Speed</h3>
-                                            <span className="bg-gray-100 text-gray-800 px-3 py-1 rounded-full font-mono font-bold">
-                                                {parseFloat(speed.toFixed(2))}x
+                                        <div className="flex justify-between items-center mb-3">
+                                            <label
+                                                htmlFor={sliderId}
+                                                className="text-sm font-semibold text-zinc-900"
+                                            >
+                                                Playback speed
+                                            </label>
+                                            <span className="font-mono tabular-nums text-xs font-bold bg-zinc-100 border border-zinc-200 text-zinc-900 px-2.5 py-1 rounded-lg">
+                                                {formattedSpeed}x
                                             </span>
                                         </div>
 
                                         <input
+                                            id={sliderId}
                                             type="range"
                                             min="0.25"
                                             max="2"
                                             step="0.05"
                                             value={speed}
                                             disabled={isProcessing}
-                                            onChange={(e) => handleSpeedChange(parseFloat(e.target.value))}
-                                            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-orange-500 disabled:opacity-50"
+                                            onChange={(e) => handle_speed_change(parseFloat(e.target.value))}
+                                            className="w-full h-2 bg-zinc-200 rounded-lg appearance-none cursor-pointer accent-blue-600 disabled:opacity-50"
                                         />
-                                        <div className="relative text-xs text-gray-400 mt-2 font-medium h-4">
-                                            <span className="absolute left-0">0.25x</span>
-                                            <span className="absolute left-[42.85%] -translate-x-1/2">1x</span>
-                                            <span className="absolute right-0">2x</span>
+                                        <div className="flex justify-between text-[11px] font-mono text-zinc-500 mt-1">
+                                            <span>0.25x</span>
+                                            <span>1x</span>
+                                            <span>2x</span>
                                         </div>
                                     </div>
 
-                                    <div className="grid grid-cols-3 gap-2">
-                                        {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((acc) => (
-                                            <SpeedButton key={acc} val={acc} />
-                                        ))}
+                                    <div className="grid grid-cols-4 gap-2" role="group" aria-label="Speed presets">
+                                        {SPEED_PRESETS.map((val) => {
+                                            const isActive = formattedSpeed === val
+                                            return (
+                                                <button
+                                                    key={val}
+                                                    type="button"
+                                                    disabled={isProcessing}
+                                                    aria-pressed={isActive}
+                                                    onClick={() => handle_speed_change(val)}
+                                                    className={`min-h-[38px] px-2 py-1.5 rounded-lg font-mono tabular-nums text-xs font-semibold transition-colors disabled:opacity-50 ${
+                                                        isActive
+                                                            ? 'bg-blue-600 text-white border border-blue-600'
+                                                            : 'bg-zinc-50 text-zinc-700 border border-zinc-200 hover:bg-zinc-100'
+                                                    }`}
+                                                >
+                                                    {val}x
+                                                </button>
+                                            )
+                                        })}
                                     </div>
                                 </div>
 
-                                <div className="space-y-3">
+                                {/* Submit & Cancel */}
+                                <div className="space-y-2.5">
                                     <button
-                                        disabled={isProcessing || isCancelling || processStatus === 'cancelled'}
-                                        onClick={handleApplyAndDownload}
-                                        className={`w-full py-4 font-bold rounded-2xl shadow-lg transition-all transform hover:scale-[1.02] active:scale-95 flex flex-col items-center justify-center gap-1
-                                            ${(isCancelling || processStatus === 'cancelled')
-                                                ? 'bg-red-50 text-red-500 border-2 border-red-100 cursor-default shadow-none scale-100'
-                                                : isProcessing
-                                                    ? 'bg-gray-800 text-white opacity-90 cursor-wait'
-                                                    : 'bg-gray-900 text-white hover:bg-gray-800'
-                                            }`}
+                                        type="button"
+                                        disabled={
+                                            isProcessing ||
+                                            isCancelling ||
+                                            speedRateLimit.isLimited ||
+                                            formattedSpeed === 1
+                                        }
+                                        onClick={handle_apply_and_download}
+                                        className="w-full min-h-[48px] px-5 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2 whitespace-nowrap"
                                     >
-                                        {(isCancelling || processStatus === 'cancelled') ? (
-                                            <span className="animate-pulse flex items-center gap-2">
-                                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                                        {isCancelling ? (
+                                            <>
+                                                <X size={18} weight="bold" aria-hidden="true" />
                                                 Cancelling...
-                                            </span>
+                                            </>
                                         ) : isProcessing ? (
                                             <>
-                                                <div className="flex items-center gap-2">
-                                                    <svg className="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                                                    Processing...
-                                                </div>
-                                                <span className="text-[10px] uppercase tracking-widest opacity-60">Polling status...</span>
+                                                <CircleNotch
+                                                    size={18}
+                                                    weight="bold"
+                                                    aria-hidden="true"
+                                                    className="animate-spin"
+                                                />
+                                                Applying {formattedSpeed}x speed...
+                                            </>
+                                        ) : speedRateLimit.isLimited ? (
+                                            <>
+                                                <ClockCountdown size={18} weight="bold" aria-hidden="true" />
+                                                Wait {format_countdown(speedRateLimit.remainingSeconds)}
                                             </>
                                         ) : (
-                                            "Apply Speed & Download"
+                                            <>
+                                                <Gauge size={18} weight="bold" aria-hidden="true" />
+                                                Apply {formattedSpeed}x Speed
+                                            </>
                                         )}
                                     </button>
 
-                                    {/* Action Button: Cancel Link */}
-                                    {isProcessing && !isCancelling && processStatus !== 'cancelled' && (
+                                    {formattedSpeed === 1 && !isProcessing && !speedRateLimit.isLimited && (
+                                        <p className="text-xs text-center text-zinc-500">
+                                            Choose a speed other than 1x to process.
+                                        </p>
+                                    )}
+
+                                    {isProcessing && !isCancelling && (
                                         <div className="flex justify-center">
                                             <button
-                                                onClick={handleCancelRequest}
-                                                className="text-sm text-gray-400 hover:text-red-500 font-medium transition-colors flex items-center gap-1 py-1 px-3 rounded-full hover:bg-red-50"
+                                                type="button"
+                                                onClick={handle_cancel_request}
+                                                className="inline-flex items-center gap-1.5 min-h-[40px] px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-semibold transition-all active:scale-[0.98]"
                                             >
-                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                                </svg>
+                                                <X size={15} weight="bold" aria-hidden="true" />
                                                 Cancel request
                                             </button>
                                         </div>
                                     )}
                                 </div>
+
+                                {/* Completed Output Bar */}
+                                {speedOutput && (
+                                    <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 space-y-3">
+                                        <div className="flex items-center justify-between gap-2 text-emerald-950">
+                                            <div className="flex items-center gap-2">
+                                                <CheckCircle
+                                                    size={18}
+                                                    weight="fill"
+                                                    aria-hidden="true"
+                                                    className="text-emerald-600"
+                                                />
+                                                <span className="text-sm font-semibold">
+                                                    {speedOutput.appliedSpeed}x video ready
+                                                </span>
+                                            </div>
+                                            {speedOutput.size && (
+                                                <span className="font-mono text-xs text-emerald-800 bg-white border border-emerald-200 px-2 py-0.5 rounded-lg">
+                                                    {speedOutput.size}
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        <div className="flex flex-wrap gap-2">
+                                            {speedOutput.outputUrl && (
+                                                <button
+                                                    type="button"
+                                                    onClick={handle_share_output}
+                                                    className="flex-1 inline-flex items-center justify-center gap-1.5 min-h-[40px] px-3 py-2 rounded-xl bg-white border border-emerald-200 text-zinc-800 hover:bg-zinc-50 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap"
+                                                >
+                                                    {copyState === 'copied' ? (
+                                                        <>
+                                                            <Check
+                                                                size={15}
+                                                                weight="bold"
+                                                                aria-hidden="true"
+                                                                className="text-emerald-600"
+                                                            />
+                                                            Copied!
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <LinkSimple size={15} weight="bold" aria-hidden="true" />
+                                                            Share URL
+                                                        </>
+                                                    )}
+                                                </button>
+                                            )}
+
+                                            <button
+                                                type="button"
+                                                disabled={isDownloadingOutput}
+                                                onClick={handle_download_output}
+                                                className="flex-1 inline-flex items-center justify-center gap-1.5 min-h-[40px] px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-semibold transition-all disabled:opacity-50 whitespace-nowrap"
+                                            >
+                                                {isDownloadingOutput ? (
+                                                    <>
+                                                        <CircleNotch
+                                                            size={15}
+                                                            weight="bold"
+                                                            aria-hidden="true"
+                                                            className="animate-spin"
+                                                        />
+                                                        Downloading...
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <DownloadSimple size={15} weight="bold" aria-hidden="true" />
+                                                        Download
+                                                    </>
+                                                )}
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     )}
