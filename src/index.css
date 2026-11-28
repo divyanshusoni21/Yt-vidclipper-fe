@@ -150,3 +150,82 @@ button {
     cursor: not-allowed;
     opacity: 0.6;
 }
+
+/* ClipLoader compositor-only animations (transform + opacity) for the gliding filmstrip loader. */
+@keyframes clip-filmstrip-scroll {
+    0% {
+        transform: translateX(0);
+    }
+    100% {
+        transform: translateX(-50%);
+    }
+}
+
+@keyframes clip-scissor-glide {
+    0% {
+        transform: translateX(-46px);
+    }
+    100% {
+        transform: translateX(150px);
+    }
+}
+
+@keyframes clip-scissor-bob {
+    0%,
+    100% {
+        transform: translateY(0) rotate(-6deg);
+    }
+    35% {
+        transform: translateY(-3px) rotate(8deg);
+    }
+    65% {
+        transform: translateY(1px) rotate(-10deg);
+    }
+}
+
+@keyframes clip-ripple-trail {
+    0% {
+        transform: translateX(0) scaleX(0.6);
+        opacity: 0.75;
+    }
+    100% {
+        transform: translateX(-16px) scaleX(1.1);
+        opacity: 0;
+    }
+}
+
+.clip-loader-filmstrip-track {
+    animation: clip-filmstrip-scroll 2.4s linear infinite;
+}
+
+.clip-loader-scissor-glide {
+    animation: clip-scissor-glide 2.2s linear infinite;
+}
+
+.clip-loader-scissor-bob {
+    animation: clip-scissor-bob 1.6s ease-in-out infinite;
+}
+
+.clip-loader-ripple {
+    animation: clip-ripple-trail 1.6s ease-out infinite;
+}
+
+.clip-loader-ripple--delayed {
+    animation-delay: 0.55s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .clip-loader-filmstrip-track {
+        animation-duration: 12s;
+    }
+    .clip-loader-scissor-glide {
+        animation-duration: 10s;
+    }
+    .clip-loader-scissor-bob {
+        animation-duration: 6s;
+    }
+    .clip-loader-ripple {
+        animation: none;
+        opacity: 0.45;
+    }
+}

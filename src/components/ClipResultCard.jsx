@@ -19,9 +19,10 @@ import InlineSpeedEditor from './InlineSpeedEditor'
 function ClipResultCard({
     resolution,
     clip,
-    isProcessing,
     clipDuration = 0,
     speedRateLimitCooldown,
+    isSpeedEditing = false,
+    onSpeedProcessingChange,
 }) {
     const panelId = useId()
     const [isSpeedEditorOpen, setIsSpeedEditorOpen] = useState(false)
@@ -60,27 +61,21 @@ function ClipResultCard({
         <div className="bg-white rounded-2xl border border-zinc-200 p-4 sm:p-5">
             <div className="flex items-center justify-between gap-2 sm:gap-3">
                 <div className="flex items-center gap-2 flex-wrap min-w-0">
-                    {clip?.size ? (
+                    {clip?.size && (
                         <span className="font-mono tabular-nums text-xs text-zinc-600 bg-zinc-50 border border-zinc-200 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg">
                             {clip.size}
                         </span>
-                    ) : (
-                        isProcessing && (
-                            <span
-                                aria-label={`Generating ${resolution} clip`}
-                                className="inline-block h-5 w-20 sm:w-24 bg-zinc-200 rounded-md animate-pulse"
-                            />
-                        )
                     )}
                 </div>
 
                 <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                     <button
                         type="button"
-                        disabled={!isClipReady}
+                        disabled={!isClipReady || isSpeedEditing}
                         aria-expanded={isSpeedEditorOpen}
                         aria-controls={panelId}
                         aria-label={`Edit Speed for ${resolution} clip`}
+                        title={isSpeedEditing ? 'Wait for speed edit to finish' : undefined}
                         onClick={() => setIsSpeedEditorOpen((prev) => !prev)}
                         className={`inline-flex items-center justify-center gap-1.5 min-h-[38px] sm:min-h-[40px] px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-medium border transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap ${
                             isSpeedEditorOpen
@@ -155,6 +150,7 @@ function ClipResultCard({
                         resolution={resolution}
                         clipDuration={clipDuration}
                         rateLimitCooldown={speedRateLimitCooldown}
+                        onProcessingChange={onSpeedProcessingChange}
                     />
                 </div>
             )}

@@ -36,7 +36,13 @@ const SPEED_PRESETS = [0.75, 1, 1.25, 1.5]
  * Shows compact speed slider + presets + submit on the left, live duration estimate + preview
  * on the right, and Share URL + Download buttons once the speed-edited file is ready.
  */
-function InlineSpeedEditor({ clip, resolution, clipDuration = 0, rateLimitCooldown }) {
+function InlineSpeedEditor({
+    clip,
+    resolution,
+    clipDuration = 0,
+    rateLimitCooldown,
+    onProcessingChange,
+}) {
     const sliderId = useId()
     const videoRef = useRef(null)
     const pollingRef = useRef(null)
@@ -68,15 +74,25 @@ function InlineSpeedEditor({ clip, resolution, clipDuration = 0, rateLimitCooldo
         }
     }
 
+    const isSpeedBusy = isProcessing || isCancelling
+
     useEffect(() => {
         if (videoRef.current) {
             videoRef.current.playbackRate = speed
         }
     }, [speed, showPreview])
 
+    // Notify parent card/page while a speed job is active so conflicting controls lock safely.
     useEffect(() => {
-        return () => clear_polling()
-    }, [])
+        onProcessingChange?.(resolution, isSpeedBusy)
+    }, [isSpeedBusy, resolution, onProcessingChange])
+
+    useEffect(() => {
+        return () => {
+            clear_polling()
+            onProcessingChange?.(resolution, false)
+        }
+    }, [resolution, onProcessingChange])
 
     const handle_loaded_metadata = () => {
         if (videoRef.current) {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useId } from 'react'
+import { useState, useEffect, useRef, useId, useCallback } from 'react'
 import { useLocation } from 'react-router-dom'
 import {
     CheckCircle,
@@ -15,6 +15,7 @@ import Header from '../components/Header'
 import Footer from '../components/Footer'
 import ClipRangePicker from '../components/ClipRangePicker'
 import ClipResultCard from '../components/ClipResultCard'
+import ClipLoader from '../components/ClipLoader'
 import RateLimitBanner from '../components/RateLimitBanner'
 import {
     ApiError,
@@ -106,6 +107,7 @@ function Home() {
         const saved = sessionStorage.getItem('processStartTime')
         return saved ? parseInt(saved, 10) : null
     })
+    const [nowMs, setNowMs] = useState(() => Date.now())
     const [clipDuration, setClipDuration] = useState(() => {
         if (navOverridesStoredVideo) return 0
         return parseInt(sessionStorage.getItem('clipDuration') || '0', 10) || 0
@@ -114,6 +116,8 @@ function Home() {
         navOverridesStoredVideo ? EMPTY_RESULTS : read_stored_results()
     )
     const [activeResolution, setActiveResolution] = useState('720p')
+    const [activeSpeedEditResolution, setActiveSpeedEditResolution] = useState(null)
+    const [completionNoticeSeconds, setCompletionNoticeSeconds] = useState(null)
 
     // Store video duration keyed by videoId so stale metadata never bleeds across URL changes.
     const [videoMeta, setVideoMeta] = useState(() => ({
@@ -143,6 +147,11 @@ function Home() {
             clipStatus !== 'cancelled'
     )
     const isProcessing = isSubmittingClip || isClipTaskActive
+    const isSpeedEditing = Boolean(activeSpeedEditResolution)
+    const elapsedSeconds =
+        isProcessing && processStartTime
+            ? Math.max(0, Math.floor((nowMs - processStartTime) / 1000))
+            : 0
 
     const startSeconds = time_to_seconds(startTime)
     const endSeconds = time_to_seconds(endTime)
@@ -157,6 +166,12 @@ function Home() {
         }
     }
 
+    const handle_speed_processing_change = useCallback((resolution, isActive) => {
+        setActiveSpeedEditResolution((prev) =>
+            isActive ? resolution : prev === resolution ? null : prev
+        )
+    }, [])
+
     const reset_clip_task_state = () => {
         clear_polling()
         setIsSubmittingClip(false)
@@ -166,6 +181,8 @@ function Home() {
         setClipDuration(0)
         setResults(EMPTY_RESULTS)
         setActiveResolution('720p')
+        setActiveSpeedEditResolution(null)
+        setCompletionNoticeSeconds(null)
         setEmailFeedback(null)
         sessionStorage.removeItem('clipRequestId')
         sessionStorage.removeItem('clipStatus')
@@ -330,6 +347,13 @@ function Home() {
 
                 if (data.status === 'completed') {
                     clear_polling()
+                    if (processStartTime) {
+                        const totalSeconds = Math.max(
+                            1,
+                            Math.round((Date.now() - processStartTime) / 1000)
+                        )
+                        setCompletionNoticeSeconds(totalSeconds)
+                    }
                 } else if (data.status === 'failed') {
                     clear_polling()
                     setErrors((prev) => ({
@@ -356,9 +380,27 @@ function Home() {
         return () => clear_polling()
     }, [clipRequestId, isClipTaskActive, startTime, endTime, processStartTime])
 
+    // Tick elapsed processing duration once per second so the submit button gives calm feedback without a second spinner.
+    useEffect(() => {
+        if (!isProcessing || !processStartTime) return undefined
+        const timerId = setInterval(() => {
+            setNowMs(Date.now())
+        }, 1000)
+        return () => clearInterval(timerId)
+    }, [isProcessing, processStartTime])
+
+    // Auto-dismiss the total clip creation time pill after 5 seconds.
+    useEffect(() => {
+        if (completionNoticeSeconds === null) return undefined
+        const hideTimer = setTimeout(() => {
+            setCompletionNoticeSeconds(null)
+        }, 5000)
+        return () => clearTimeout(hideTimer)
+    }, [completionNoticeSeconds])
+
     const handle_generate_clip = async (e) => {
         e.preventDefault()
-        if (isProcessing || isCancelling || clipRateLimit.isLimited) return
+        if (isProcessing || isCancelling || isSpeedEditing || clipRateLimit.isLimited) return
 
         setErrors({})
 
@@ -382,12 +424,15 @@ function Home() {
 
         clear_polling()
         clipRateLimit.clearRateLimit()
+        const startedAt = Date.now()
         setIsSubmittingClip(true)
         setClipRequestId(null)
         setClipStatus('pending')
-        setProcessStartTime(null)
+        setProcessStartTime(startedAt)
+        setNowMs(startedAt)
         setClipDuration(Math.max(0, time_to_seconds(endTime) - time_to_seconds(startTime)))
         setResults(EMPTY_RESULTS)
+        setCompletionNoticeSeconds(null)
         setEmailFeedback(null)
 
         try {
@@ -398,7 +443,6 @@ function Home() {
             })
             setClipRequestId(data.id)
             setClipStatus(data.status || 'pending')
-            setProcessStartTime(Date.now())
             if (typeof data.clip_duration === 'number' && data.clip_duration > 0) {
                 setClipDuration(data.clip_duration)
             }
@@ -466,6 +510,7 @@ function Home() {
     }
 
     const handle_resolution_tab_keydown = (currentIndex, e) => {
+        if (isSpeedEditing) return
         if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
         e.preventDefault()
         const nextIndex =
@@ -643,8 +688,14 @@ function Home() {
                                                     !videoId ||
                                                     isProcessing ||
                                                     isCancelling ||
+                                                    isSpeedEditing ||
                                                     clipStatus === 'cancelled' ||
                                                     clipRateLimit.isLimited
+                                                }
+                                                title={
+                                                    isSpeedEditing
+                                                        ? 'Wait for speed edit to finish'
+                                                        : undefined
                                                 }
                                                 className="flex-1 min-w-0 inline-flex items-center justify-center gap-2 min-h-[46px] px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm sm:text-base font-semibold transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
                                             >
@@ -655,13 +706,10 @@ function Home() {
                                                     </>
                                                 ) : isProcessing ? (
                                                     <>
-                                                        <CircleNotch
-                                                            size={18}
-                                                            weight="bold"
-                                                            aria-hidden="true"
-                                                            className="animate-spin"
-                                                        />
-                                                        Creating clips...
+                                                        <span>Creating clips</span>
+                                                        <span className="font-mono tabular-nums text-white/90">
+                                                            ({format_duration(elapsedSeconds)})
+                                                        </span>
                                                     </>
                                                 ) : clipRateLimit.isLimited ? (
                                                     <>
@@ -721,161 +769,208 @@ function Home() {
                     {/* Generated Clip Results */}
                     {showResultsSection && (
                         <section className="space-y-4">
-                            <div className="flex items-center justify-between gap-2">
-                                <div
-                                    role="tablist"
-                                    aria-label="Clip resolution"
-                                    className="inline-grid grid-cols-2 shrink-0 sm:min-w-[180px] p-1 rounded-xl bg-zinc-200/70 border border-zinc-200"
-                                >
-                                    {RESOLUTION_TABS.map((tab, index) => {
-                                        const isActive = activeResolution === tab.id
-                                        return (
-                                            <button
-                                                key={tab.id}
-                                                ref={(el) => {
-                                                    resolutionTabRefs.current[tab.id] = el
-                                                }}
-                                                type="button"
-                                                role="tab"
-                                                id={`${resolutionTabsId}-tab-${tab.id}`}
-                                                aria-selected={isActive}
-                                                aria-controls={`${resolutionTabsId}-panel-${tab.id}`}
-                                                aria-label={`${tab.id} clip`}
-                                                tabIndex={isActive ? 0 : -1}
-                                                onClick={() => setActiveResolution(tab.id)}
-                                                onKeyDown={(e) => handle_resolution_tab_keydown(index, e)}
-                                                className={`min-h-[32px] sm:min-h-[38px] px-3 sm:px-5 py-1 sm:py-1.5 rounded-lg font-mono tabular-nums text-xs sm:text-sm font-semibold transition-all ${
-                                                    isActive
-                                                        ? 'bg-blue-50 text-blue-700 border border-blue-200 shadow-xs'
-                                                        : 'text-zinc-600 border border-transparent hover:text-zinc-900'
-                                                }`}
-                                            >
-                                                {tab.label}
-                                            </button>
-                                        )
-                                    })}
+                            {isProcessing ? (
+                                /* Show only the centered loader container while clips are generating. */
+                                <div className="bg-white rounded-2xl border border-zinc-200 p-4 sm:p-5 flex items-center justify-center">
+                                    <ClipLoader ariaLabel="Creating clips" />
                                 </div>
-
-                                <span className="ml-auto font-mono tabular-nums text-[11px] sm:text-xs font-medium text-zinc-600 bg-white border border-zinc-200 px-2 sm:px-3 py-1 rounded-lg whitespace-nowrap truncate">
-                                    {startTime} to {endTime} ({format_duration(effectiveClipDuration)})
-                                </span>
-                            </div>
-
-                            <div>
-                                {/* Keep both resolution cards mounted so switching tabs preserves open or active speed edits. */}
-                                <div
-                                    role="tabpanel"
-                                    id={`${resolutionTabsId}-panel-720p`}
-                                    aria-labelledby={`${resolutionTabsId}-tab-720p`}
-                                    hidden={activeResolution !== '720p'}
-                                >
-                                    <ClipResultCard
-                                        key={`720p-${results.p720.id || 'pending'}`}
-                                        resolution="720p"
-                                        clip={results.p720}
-                                        isProcessing={isProcessing}
-                                        clipDuration={effectiveClipDuration}
-                                        speedRateLimitCooldown={speedRateLimit}
-                                    />
-                                </div>
-                                <div
-                                    role="tabpanel"
-                                    id={`${resolutionTabsId}-panel-480p`}
-                                    aria-labelledby={`${resolutionTabsId}-tab-480p`}
-                                    hidden={activeResolution !== '480p'}
-                                >
-                                    <ClipResultCard
-                                        key={`480p-${results.p480.id || 'pending'}`}
-                                        resolution="480p"
-                                        clip={results.p480}
-                                        isProcessing={isProcessing}
-                                        clipDuration={effectiveClipDuration}
-                                        speedRateLimitCooldown={speedRateLimit}
-                                    />
-                                </div>
-                            </div>
-
-                            {clipStatus === 'completed' && (
-                                <form
-                                    onSubmit={handle_send_email}
-                                    noValidate
-                                    className="bg-white border border-zinc-200 rounded-2xl p-4 sm:p-5 space-y-3"
-                                >
-                                    <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-                                        <div className="space-y-1 flex-1">
-                                            <label
-                                                htmlFor={emailInputId}
-                                                className="block text-sm font-semibold text-zinc-900"
-                                            >
-                                                Send clips to email
-                                            </label>
-                                            <p className="text-xs text-zinc-500">
-                                                Receive download links for both clips in your inbox.
-                                            </p>
+                            ) : (
+                                <>
+                                    <div className="flex items-center justify-between gap-2">
+                                        <div
+                                            role="tablist"
+                                            aria-label="Clip resolution"
+                                            className="inline-grid grid-cols-2 shrink-0 sm:min-w-[180px] p-1 rounded-xl bg-zinc-200/70 border border-zinc-200"
+                                        >
+                                            {RESOLUTION_TABS.map((tab, index) => {
+                                                const isActive = activeResolution === tab.id
+                                                const isTabDisabled = Boolean(
+                                                    activeSpeedEditResolution &&
+                                                        activeSpeedEditResolution !== tab.id
+                                                )
+                                                return (
+                                                    <button
+                                                        key={tab.id}
+                                                        ref={(el) => {
+                                                            resolutionTabRefs.current[tab.id] = el
+                                                        }}
+                                                        type="button"
+                                                        role="tab"
+                                                        id={`${resolutionTabsId}-tab-${tab.id}`}
+                                                        aria-selected={isActive}
+                                                        aria-controls={`${resolutionTabsId}-panel-${tab.id}`}
+                                                        aria-label={`${tab.id} clip`}
+                                                        tabIndex={isActive ? 0 : -1}
+                                                        disabled={isTabDisabled}
+                                                        title={
+                                                            isTabDisabled
+                                                                ? 'Wait for speed edit to finish'
+                                                                : undefined
+                                                        }
+                                                        onClick={() => {
+                                                            if (!isTabDisabled) setActiveResolution(tab.id)
+                                                        }}
+                                                        onKeyDown={(e) => handle_resolution_tab_keydown(index, e)}
+                                                        className={`min-h-[32px] sm:min-h-[38px] px-3 sm:px-5 py-1 sm:py-1.5 rounded-lg font-mono tabular-nums text-xs sm:text-sm font-semibold transition-all disabled:opacity-45 disabled:cursor-not-allowed ${
+                                                            isActive
+                                                                ? 'bg-blue-50 text-blue-700 border border-blue-200 shadow-xs'
+                                                                : 'text-zinc-600 border border-transparent hover:text-zinc-900'
+                                                        }`}
+                                                    >
+                                                        {tab.label}
+                                                    </button>
+                                                )
+                                            })}
                                         </div>
 
-                                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full md:w-auto">
-                                            <input
-                                                id={emailInputId}
-                                                name="email"
-                                                type="email"
-                                                autoComplete="email"
-                                                value={email}
-                                                onChange={(e) => {
-                                                    setEmail(e.target.value)
-                                                    setEmailFeedback(null)
-                                                }}
-                                                placeholder="you@example.com"
-                                                className="min-h-[44px] px-3.5 py-2 rounded-xl border border-zinc-200 bg-zinc-50 focus:bg-white text-sm text-zinc-950 placeholder:text-zinc-400 outline-none focus:border-zinc-400 sm:w-64"
+                                        <span className="ml-auto font-mono tabular-nums text-[11px] sm:text-xs font-medium text-zinc-600 bg-white border border-zinc-200 px-2 sm:px-3 py-1 rounded-lg whitespace-nowrap truncate">
+                                            {startTime} to {endTime} ({format_duration(effectiveClipDuration)})
+                                        </span>
+                                    </div>
+
+                                    <div>
+                                        {/* Keep both resolution cards mounted so switching tabs preserves open or active speed edits. */}
+                                        <div
+                                            role="tabpanel"
+                                            id={`${resolutionTabsId}-panel-720p`}
+                                            aria-labelledby={`${resolutionTabsId}-tab-720p`}
+                                            hidden={activeResolution !== '720p'}
+                                        >
+                                            <ClipResultCard
+                                                key={`720p-${results.p720.id || 'pending'}`}
+                                                resolution="720p"
+                                                clip={results.p720}
+                                                clipDuration={effectiveClipDuration}
+                                                speedRateLimitCooldown={speedRateLimit}
+                                                isSpeedEditing={activeSpeedEditResolution === '720p'}
+                                                onSpeedProcessingChange={handle_speed_processing_change}
                                             />
-                                            <button
-                                                type="submit"
-                                                disabled={isEmailSending}
-                                                className="inline-flex items-center justify-center gap-1.5 min-h-[44px] px-5 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white text-sm font-semibold transition-colors disabled:opacity-50 whitespace-nowrap"
-                                            >
-                                                {isEmailSending ? (
-                                                    <>
-                                                        <CircleNotch
-                                                            size={16}
-                                                            weight="bold"
-                                                            aria-hidden="true"
-                                                            className="animate-spin"
-                                                        />
-                                                        Sending...
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <EnvelopeSimple size={16} weight="bold" aria-hidden="true" />
-                                                        Send
-                                                    </>
-                                                )}
-                                            </button>
+                                        </div>
+                                        <div
+                                            role="tabpanel"
+                                            id={`${resolutionTabsId}-panel-480p`}
+                                            aria-labelledby={`${resolutionTabsId}-tab-480p`}
+                                            hidden={activeResolution !== '480p'}
+                                        >
+                                            <ClipResultCard
+                                                key={`480p-${results.p480.id || 'pending'}`}
+                                                resolution="480p"
+                                                clip={results.p480}
+                                                clipDuration={effectiveClipDuration}
+                                                speedRateLimitCooldown={speedRateLimit}
+                                                isSpeedEditing={activeSpeedEditResolution === '480p'}
+                                                onSpeedProcessingChange={handle_speed_processing_change}
+                                            />
                                         </div>
                                     </div>
 
-                                    {emailFeedback && (
-                                        <p
-                                            role={emailFeedback.type === 'error' ? 'alert' : 'status'}
-                                            className={`text-xs font-medium flex items-center gap-1.5 ${
-                                                emailFeedback.type === 'success'
-                                                    ? 'text-emerald-700'
-                                                    : 'text-red-600'
-                                            }`}
+                                    {clipStatus === 'completed' && (
+                                        <form
+                                            onSubmit={handle_send_email}
+                                            noValidate
+                                            className="bg-white border border-zinc-200 rounded-2xl p-4 sm:p-5 space-y-3"
                                         >
-                                            {emailFeedback.type === 'success' ? (
-                                                <CheckCircle size={15} weight="fill" aria-hidden="true" />
-                                            ) : (
-                                                <WarningCircle size={15} weight="bold" aria-hidden="true" />
+                                            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+                                                <div className="space-y-1 flex-1">
+                                                    <label
+                                                        htmlFor={emailInputId}
+                                                        className="block text-sm font-semibold text-zinc-900"
+                                                    >
+                                                        Send clips to email
+                                                    </label>
+                                                    <p className="text-xs text-zinc-500">
+                                                        Receive download links for both clips in your inbox.
+                                                    </p>
+                                                </div>
+
+                                                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full md:w-auto">
+                                                    <input
+                                                        id={emailInputId}
+                                                        name="email"
+                                                        type="email"
+                                                        autoComplete="email"
+                                                        value={email}
+                                                        onChange={(e) => {
+                                                            setEmail(e.target.value)
+                                                            setEmailFeedback(null)
+                                                        }}
+                                                        placeholder="you@example.com"
+                                                        className="min-h-[44px] px-3.5 py-2 rounded-xl border border-zinc-200 bg-zinc-50 focus:bg-white text-sm text-zinc-950 placeholder:text-zinc-400 outline-none focus:border-zinc-400 sm:w-64"
+                                                    />
+                                                    <button
+                                                        type="submit"
+                                                        disabled={isEmailSending}
+                                                        className="inline-flex items-center justify-center gap-1.5 min-h-[44px] px-5 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white text-sm font-semibold transition-colors disabled:opacity-50 whitespace-nowrap"
+                                                    >
+                                                        {isEmailSending ? (
+                                                            <>
+                                                                <CircleNotch
+                                                                    size={16}
+                                                                    weight="bold"
+                                                                    aria-hidden="true"
+                                                                    className="animate-spin"
+                                                                />
+                                                                Sending...
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <EnvelopeSimple size={16} weight="bold" aria-hidden="true" />
+                                                                Send
+                                                            </>
+                                                        )}
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {emailFeedback && (
+                                                <p
+                                                    role={emailFeedback.type === 'error' ? 'alert' : 'status'}
+                                                    className={`text-xs font-medium flex items-center gap-1.5 ${
+                                                        emailFeedback.type === 'success'
+                                                            ? 'text-emerald-700'
+                                                            : 'text-red-600'
+                                                    }`}
+                                                >
+                                                    {emailFeedback.type === 'success' ? (
+                                                        <CheckCircle size={15} weight="fill" aria-hidden="true" />
+                                                    ) : (
+                                                        <WarningCircle size={15} weight="bold" aria-hidden="true" />
+                                                    )}
+                                                    {emailFeedback.text}
+                                                </p>
                                             )}
-                                            {emailFeedback.text}
-                                        </p>
+                                        </form>
                                     )}
-                                </form>
+                                </>
                             )}
                         </section>
                     )}
                 </div>
             </main>
+
+            {/* Transient 5-second pill showing total clip creation time without shifting layout. */}
+            {completionNoticeSeconds !== null && (
+                <div
+                    role="status"
+                    aria-live="polite"
+                    className="fixed bottom-5 left-1/2 -translate-x-1/2 z-40 pointer-events-none px-4 w-full max-w-max"
+                >
+                    <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-950 shadow-md px-4 py-2 text-xs sm:text-sm font-semibold whitespace-nowrap">
+                        <CheckCircle
+                            size={17}
+                            weight="fill"
+                            aria-hidden="true"
+                            className="text-emerald-600 shrink-0"
+                        />
+                        <span>
+                            Clips created in{' '}
+                            <span className="font-mono tabular-nums text-emerald-800">
+                                {format_countdown(completionNoticeSeconds)}
+                            </span>
+                        </span>
+                    </div>
+                </div>
+            )}
 
             <Footer />
         </div>
