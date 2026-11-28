@@ -29,27 +29,12 @@ import {
 } from '../utils/timeUtils'
 import RateLimitBanner from './RateLimitBanner'
 
-const SPEED_PRESETS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2]
-
-/**
- * Formats the duration difference in seconds into a concise change label.
- */
-const format_delta_label = (originalSeconds, estimatedSeconds, speedFactor) => {
-    if (!originalSeconds || originalSeconds <= 0) return ''
-    if (speedFactor === 1) return 'Original length'
-
-    const diff = Math.round(originalSeconds - estimatedSeconds)
-    if (diff === 0) return 'Minimal change'
-
-    const absDiff = Math.abs(diff)
-    const readable = absDiff < 60 ? `${absDiff}s` : format_duration(absDiff)
-    return diff > 0 ? `${readable} shorter` : `${readable} longer`
-}
+const SPEED_PRESETS = [0.75, 1, 1.25, 1.5]
 
 /**
  * Inline speed-adjustment workspace rendered directly inside a generated ClipResultCard.
- * Shows live estimated output duration, optional video preview, submit/cancel controls,
- * and Share URL + Download buttons once the speed-edited file is ready.
+ * Shows compact speed slider + presets + submit on the left, live duration estimate + preview
+ * on the right, and Share URL + Download buttons once the speed-edited file is ready.
  */
 function InlineSpeedEditor({ clip, resolution, clipDuration = 0, rateLimitCooldown }) {
     const sliderId = useId()
@@ -75,7 +60,6 @@ function InlineSpeedEditor({ clip, resolution, clipDuration = 0, rateLimitCooldo
         metadataDuration && metadataDuration > 0 ? metadataDuration : clipDuration || 0
     const estimatedDuration = effectiveOriginalDuration > 0 ? effectiveOriginalDuration / speed : 0
     const formattedSpeed = parseFloat(speed.toFixed(2))
-    const deltaLabel = format_delta_label(effectiveOriginalDuration, estimatedDuration, formattedSpeed)
 
     const clear_polling = () => {
         if (pollingRef.current) {
@@ -249,159 +233,175 @@ function InlineSpeedEditor({ clip, resolution, clipDuration = 0, rateLimitCooldo
 
     return (
         <div className="mt-4 pt-4 border-t border-zinc-200 space-y-4">
-            {/* Estimated Duration Strip */}
-            <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3">
-                <div className="flex flex-wrap items-center gap-2.5 sm:gap-4 text-sm">
-                    <div>
-                        <span className="text-zinc-500 mr-1.5">Original</span>
-                        <span className="font-mono tabular-nums font-semibold text-zinc-900">
-                            {effectiveOriginalDuration > 0 ? format_duration(effectiveOriginalDuration) : '--:--'}
-                        </span>
-                    </div>
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-5 items-start">
+                {/* Left Column: Estimated Duration & Optional Video Preview */}
+                <div className="md:col-span-6 min-w-0">
+                    <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-3.5 space-y-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                                <span className="sr-only">Original</span>
+                                <span className="font-mono tabular-nums text-sm font-semibold text-zinc-900">
+                                    {effectiveOriginalDuration > 0
+                                        ? format_duration(effectiveOriginalDuration)
+                                        : '--:--'}
+                                </span>
 
-                    <ArrowRight size={15} weight="bold" aria-hidden="true" className="text-zinc-400" />
+                                <ArrowRight size={15} weight="bold" aria-hidden="true" className="text-zinc-400" />
 
-                    <div>
-                        <span className="text-zinc-500 mr-1.5">Estimated total</span>
-                        <span className="font-mono tabular-nums font-bold text-blue-600 text-base">
-                            {effectiveOriginalDuration > 0 ? format_duration(estimatedDuration) : '--:--'}
-                        </span>
-                    </div>
+                                <span className="sr-only">Estimated total</span>
+                                <span className="font-mono tabular-nums font-bold text-blue-600 text-base">
+                                    {effectiveOriginalDuration > 0 ? format_duration(estimatedDuration) : '--:--'}
+                                </span>
+                            </div>
 
-                    {deltaLabel && (
-                        <span className="text-xs font-medium text-zinc-600 bg-white border border-zinc-200 px-2.5 py-0.5 rounded-lg">
-                            {deltaLabel}
-                        </span>
-                    )}
-                </div>
+                            {resolvedClipUrl && (
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPreview((prev) => !prev)}
+                                    className="ml-auto shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors"
+                                >
+                                    {showPreview ? (
+                                        <>
+                                            <EyeSlash size={15} weight="bold" aria-hidden="true" />
+                                            Hide preview
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Play size={15} weight="bold" aria-hidden="true" />
+                                            Preview at {formattedSpeed}x
+                                        </>
+                                    )}
+                                </button>
+                            )}
+                        </div>
 
-                {resolvedClipUrl && (
-                    <button
-                        type="button"
-                        onClick={() => setShowPreview((prev) => !prev)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-zinc-700 bg-white border border-zinc-200 hover:bg-zinc-100 transition-colors"
-                    >
-                        {showPreview ? (
-                            <>
-                                <EyeSlash size={15} weight="bold" aria-hidden="true" />
-                                Hide preview
-                            </>
-                        ) : (
-                            <>
-                                <Play size={15} weight="bold" aria-hidden="true" />
-                                Preview at {formattedSpeed}x
-                            </>
+                        {showPreview && resolvedClipUrl && (
+                            <div className="rounded-lg overflow-hidden bg-zinc-950 border border-zinc-200">
+                                <video
+                                    ref={videoRef}
+                                    src={resolvedClipUrl}
+                                    controls
+                                    onLoadedMetadata={handle_loaded_metadata}
+                                    className="w-full max-h-56 object-contain"
+                                />
+                            </div>
                         )}
-                    </button>
-                )}
-            </div>
-
-            {/* Optional Inline Video Preview */}
-            {showPreview && resolvedClipUrl && (
-                <div className="rounded-xl overflow-hidden bg-zinc-950 border border-zinc-200">
-                    <video
-                        ref={videoRef}
-                        src={resolvedClipUrl}
-                        controls
-                        onLoadedMetadata={handle_loaded_metadata}
-                        className="w-full max-h-64 object-contain"
-                    />
-                </div>
-            )}
-
-            {/* Speed Slider & Quick Presets */}
-            <div className="space-y-3">
-                <div className="flex items-center justify-between gap-3">
-                    <label htmlFor={sliderId} className="text-sm font-semibold text-zinc-900">
-                        Playback speed
-                    </label>
-                    <span className="font-mono tabular-nums text-xs font-bold text-zinc-900 bg-zinc-100 border border-zinc-200 px-2.5 py-1 rounded-lg">
-                        {formattedSpeed}x
-                    </span>
-                </div>
-
-                <div>
-                    <input
-                        id={sliderId}
-                        type="range"
-                        min="0.25"
-                        max="2"
-                        step="0.05"
-                        value={speed}
-                        disabled={isProcessing}
-                        onChange={(e) => handle_speed_change(parseFloat(e.target.value))}
-                        className="w-full h-2 bg-zinc-200 rounded-lg appearance-none cursor-pointer accent-blue-600 disabled:opacity-50"
-                    />
-                    <div className="flex justify-between text-[11px] font-mono text-zinc-500 mt-1">
-                        <span>0.25x</span>
-                        <span>1x</span>
-                        <span>2x</span>
                     </div>
                 </div>
 
-                <div className="flex flex-wrap gap-2" role="group" aria-label="Speed presets">
-                    {SPEED_PRESETS.map((preset) => {
-                        const isActive = formattedSpeed === preset
-                        return (
+                {/* Right Column: Compact Playback Speed Slider, Quick Presets & Submit */}
+                <div className="md:col-span-6 min-w-0 space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                        <label htmlFor={sliderId} className="text-sm font-semibold text-zinc-900">
+                            Playback speed
+                        </label>
+                        <span className="font-mono tabular-nums text-xs font-bold text-zinc-900 bg-zinc-100 border border-zinc-200 px-2.5 py-1 rounded-lg">
+                            {formattedSpeed}x
+                        </span>
+                    </div>
+
+                    <div>
+                        <input
+                            id={sliderId}
+                            type="range"
+                            min="0.25"
+                            max="2"
+                            step="0.05"
+                            value={speed}
+                            disabled={isProcessing}
+                            onChange={(e) => handle_speed_change(parseFloat(e.target.value))}
+                            className="w-full h-2 bg-zinc-200 rounded-lg appearance-none cursor-pointer accent-blue-600 disabled:opacity-50"
+                        />
+                        {/* Place 1x at (1 - 0.25) / (2 - 0.25) = 42.857% so the label aligns under the thumb at 1x. */}
+                        <div className="relative h-4 text-[11px] font-mono text-zinc-500 mt-1 select-none">
+                            <span className="absolute left-0">0.25x</span>
+                            <span
+                                className="absolute -translate-x-1/2"
+                                style={{ left: 'calc(42.857% + 1px)' }}
+                            >
+                                1x
+                            </span>
+                            <span className="absolute right-0">2x</span>
+                        </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                        <div
+                            className="flex items-center gap-1 lg:gap-2"
+                            role="group"
+                            aria-label="Speed presets"
+                        >
+                            {SPEED_PRESETS.map((preset) => {
+                                const isActive = formattedSpeed === preset
+                                return (
+                                    <button
+                                        key={preset}
+                                        type="button"
+                                        disabled={isProcessing}
+                                        aria-pressed={isActive}
+                                        onClick={() => handle_speed_change(preset)}
+                                        className={`inline-flex items-center justify-center min-h-[38px] lg:min-h-[40px] px-2 lg:px-3 py-1.5 rounded-xl font-mono tabular-nums text-xs lg:text-sm font-semibold border transition-colors disabled:opacity-50 ${
+                                            isActive
+                                                ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                                : 'bg-white text-zinc-700 border-zinc-200 hover:bg-blue-50/60 hover:text-blue-700 hover:border-blue-200'
+                                        }`}
+                                    >
+                                        {preset}x
+                                    </button>
+                                )
+                            })}
+                        </div>
+
+                        <div className="ml-auto flex items-center gap-1.5 shrink-0">
                             <button
-                                key={preset}
                                 type="button"
-                                disabled={isProcessing}
-                                aria-pressed={isActive}
-                                onClick={() => handle_speed_change(preset)}
-                                className={`min-h-[36px] px-3 py-1.5 rounded-lg font-mono tabular-nums text-xs sm:text-sm font-semibold transition-colors disabled:opacity-50 ${
-                                    isActive
-                                        ? 'bg-blue-600 text-white border border-blue-600'
-                                        : 'bg-white text-zinc-700 border border-zinc-200 hover:bg-zinc-100'
+                                disabled={isSubmitDisabled}
+                                aria-label={
+                                    isProcessing
+                                        ? `Applying ${formattedSpeed}x speed`
+                                        : `Apply ${formattedSpeed}x speed`
+                                }
+                                title={isProcessing ? `Applying ${formattedSpeed}x speed...` : undefined}
+                                onClick={handle_apply_speed}
+                                className={`inline-flex items-center justify-center gap-1.5 lg:gap-2 min-h-[38px] lg:min-h-[40px] py-1.5 lg:py-2 rounded-xl bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 text-xs lg:text-sm font-semibold transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap ${
+                                    isProcessing ? 'w-[38px] lg:w-[40px] px-0' : 'px-3 lg:px-4'
                                 }`}
                             >
-                                {preset}x
+                                {isProcessing ? (
+                                    <CircleNotch size={16} weight="bold" aria-hidden="true" className="animate-spin" />
+                                ) : isRateLimited ? (
+                                    <>
+                                        <ClockCountdown size={16} weight="bold" aria-hidden="true" />
+                                        <span>Wait {format_countdown(rateLimitCooldown.remainingSeconds)}</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Gauge size={16} weight="bold" aria-hidden="true" />
+                                        <span>Apply</span>
+                                    </>
+                                )}
                             </button>
-                        )
-                    })}
-                </div>
-            </div>
 
-            {/* Submit & Cancel Controls */}
-            <div className="flex flex-wrap items-center gap-3">
-                <button
-                    type="button"
-                    disabled={isSubmitDisabled}
-                    onClick={handle_apply_speed}
-                    className="inline-flex items-center justify-center gap-2 min-h-[44px] px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-                >
-                    {isProcessing ? (
-                        <>
-                            <CircleNotch size={17} weight="bold" aria-hidden="true" className="animate-spin" />
-                            Applying {formattedSpeed}x speed...
-                        </>
-                    ) : isRateLimited ? (
-                        <>
-                            <ClockCountdown size={17} weight="bold" aria-hidden="true" />
-                            Wait {format_countdown(rateLimitCooldown.remainingSeconds)}
-                        </>
-                    ) : (
-                        <>
-                            <Gauge size={17} weight="bold" aria-hidden="true" />
-                            Apply {formattedSpeed}x Speed
-                        </>
+                            {isProcessing && !isCancelling && (
+                                <button
+                                    type="button"
+                                    onClick={handle_cancel_speed_edit}
+                                    aria-label="Cancel speed edit"
+                                    title="Cancel"
+                                    className="w-[38px] h-[38px] lg:w-[40px] lg:h-[40px] shrink-0 inline-flex items-center justify-center rounded-xl bg-red-600 hover:bg-red-700 text-white transition-all active:scale-[0.98]"
+                                >
+                                    <X size={17} weight="bold" aria-hidden="true" />
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
+                    {formattedSpeed === 1 && !isProcessing && !isRateLimited && (
+                        <p className="text-xs text-zinc-500 text-right">
+                            Select a speed other than 1x to apply.
+                        </p>
                     )}
-                </button>
-
-                {isProcessing && !isCancelling && (
-                    <button
-                        type="button"
-                        onClick={handle_cancel_speed_edit}
-                        className="inline-flex items-center gap-1.5 min-h-[44px] px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-semibold transition-all active:scale-[0.98]"
-                    >
-                        <X size={16} weight="bold" aria-hidden="true" />
-                        Cancel
-                    </button>
-                )}
-
-                {formattedSpeed === 1 && !isProcessing && !isRateLimited && (
-                    <span className="text-xs text-zinc-500">Select a speed other than 1x to apply.</span>
-                )}
+                </div>
             </div>
 
             {/* Rate Limit & Inline Error Feedback */}
@@ -424,36 +424,31 @@ function InlineSpeedEditor({ clip, resolution, clipDuration = 0, rateLimitCooldo
 
             {/* Completed Speed-Edited Output Actions */}
             {speedOutput && (
-                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex flex-wrap items-center gap-2 text-emerald-950">
-                        <CheckCircle size={20} weight="fill" aria-hidden="true" className="text-emerald-600 shrink-0" />
-                        <span className="text-sm font-semibold">
-                            {speedOutput.appliedSpeed}x clip ready
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-2.5 sm:p-3.5 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 text-emerald-950">
+                        <CheckCircle size={18} weight="fill" aria-hidden="true" className="text-emerald-600 shrink-0" />
+                        <span className="text-xs sm:text-sm font-semibold whitespace-nowrap">
+                            {speedOutput.appliedSpeed}x<span className="hidden sm:inline"> clip</span> ready
                         </span>
                         {speedOutput.size && (
-                            <span className="font-mono text-xs text-emerald-800 bg-white border border-emerald-200 px-2 py-0.5 rounded-lg">
+                            <span className="font-mono text-[11px] sm:text-xs text-emerald-800 bg-white border border-emerald-200 px-1.5 sm:px-2 py-0.5 rounded-lg shrink-0">
                                 {speedOutput.size}
                             </span>
                         )}
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                         <button
                             type="button"
                             onClick={handle_share_output}
                             aria-label={`Share URL for ${speedOutput.appliedSpeed}x ${resolution} clip`}
-                            className="inline-flex items-center justify-center gap-1.5 min-h-[40px] px-3.5 py-2 rounded-xl bg-white border border-emerald-200 text-zinc-800 hover:bg-zinc-50 text-sm font-medium transition-colors whitespace-nowrap"
+                            title={copyState === 'copied' ? 'Copied!' : 'Share URL'}
+                            className="w-[36px] h-[36px] sm:w-[40px] sm:h-[40px] inline-flex items-center justify-center rounded-xl bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 transition-colors"
                         >
                             {copyState === 'copied' ? (
-                                <>
-                                    <Check size={16} weight="bold" aria-hidden="true" className="text-emerald-600" />
-                                    Copied!
-                                </>
+                                <Check size={16} weight="bold" aria-hidden="true" className="text-emerald-600" />
                             ) : (
-                                <>
-                                    <LinkSimple size={16} weight="bold" aria-hidden="true" />
-                                    Share URL
-                                </>
+                                <LinkSimple size={16} weight="bold" aria-hidden="true" />
                             )}
                         </button>
 
@@ -462,18 +457,13 @@ function InlineSpeedEditor({ clip, resolution, clipDuration = 0, rateLimitCooldo
                             disabled={isDownloadingOutput}
                             onClick={handle_download_output}
                             aria-label={`Download ${speedOutput.appliedSpeed}x ${resolution} clip`}
-                            className="inline-flex items-center justify-center gap-1.5 min-h-[40px] px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-all active:scale-[0.98] disabled:opacity-50 whitespace-nowrap"
+                            title={isDownloadingOutput ? 'Downloading...' : 'Download'}
+                            className="w-[36px] h-[36px] sm:w-[40px] sm:h-[40px] inline-flex items-center justify-center rounded-xl bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 transition-all active:scale-[0.98] disabled:opacity-50"
                         >
                             {isDownloadingOutput ? (
-                                <>
-                                    <CircleNotch size={16} weight="bold" aria-hidden="true" className="animate-spin" />
-                                    Downloading...
-                                </>
+                                <CircleNotch size={16} weight="bold" aria-hidden="true" className="animate-spin" />
                             ) : (
-                                <>
-                                    <DownloadSimple size={16} weight="bold" aria-hidden="true" />
-                                    Download
-                                </>
+                                <DownloadSimple size={16} weight="bold" aria-hidden="true" />
                             )}
                         </button>
                     </div>

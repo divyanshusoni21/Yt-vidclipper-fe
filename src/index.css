@@ -21,12 +21,132 @@ button {
     outline-offset: 2px;
 }
 
-/* Utility used by RollingTimePicker columns to keep scrollbars visually clean. */
-.scrollbar-hide::-webkit-scrollbar {
-    display: none;
+/* Layered dual-thumb range slider inputs; pointer events stay limited to the two blue handles. */
+.dual-range-input {
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+    pointer-events: none;
+    outline: none;
 }
 
-.scrollbar-hide {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
+.dual-range-input:focus-visible {
+    outline: none;
+}
+
+.dual-range-input::-webkit-slider-runnable-track {
+    height: 6px;
+    background: transparent;
+    border-radius: 9999px;
+}
+
+.dual-range-input::-moz-range-track {
+    height: 6px;
+    background: transparent;
+    border-radius: 9999px;
+}
+
+.dual-range-input::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    box-sizing: border-box;
+    width: 22px;
+    height: 22px;
+    margin-top: -8px;
+    border-radius: 9999px;
+    background: #2563eb;
+    border: 2px solid #ffffff;
+    box-shadow: 0 1px 4px rgb(37 99 235 / 0.35);
+    pointer-events: auto;
+    cursor: grab;
+    transition: transform 0.12s ease, background-color 0.15s ease;
+}
+
+.dual-range-input::-moz-range-thumb {
+    box-sizing: border-box;
+    width: 22px;
+    height: 22px;
+    border-radius: 9999px;
+    background: #2563eb;
+    border: 2px solid #ffffff;
+    box-shadow: 0 1px 4px rgb(37 99 235 / 0.35);
+    pointer-events: auto;
+    cursor: grab;
+    transition: transform 0.12s ease, background-color 0.15s ease;
+}
+
+.dual-range-input--start::-webkit-slider-thumb {
+    background: var(--color-blue-600, #2563eb);
+    box-shadow: 0 1px 4px rgb(37 99 235 / 0.35);
+}
+
+.dual-range-input--start::-moz-range-thumb {
+    background: var(--color-blue-600, #2563eb);
+    box-shadow: 0 1px 4px rgb(37 99 235 / 0.35);
+}
+
+.dual-range-input--end::-webkit-slider-thumb {
+    background: var(--color-blue-700, #1d4ed8);
+    box-shadow: 0 1px 4px rgb(29 78 216 / 0.35);
+}
+
+.dual-range-input--end::-moz-range-thumb {
+    background: var(--color-blue-700, #1d4ed8);
+    box-shadow: 0 1px 4px rgb(29 78 216 / 0.35);
+}
+
+.dual-range-input--start:hover:not(:disabled)::-webkit-slider-thumb {
+    background: var(--color-blue-700, #1d4ed8);
+}
+
+.dual-range-input--start:hover:not(:disabled)::-moz-range-thumb {
+    background: var(--color-blue-700, #1d4ed8);
+}
+
+.dual-range-input--end:hover:not(:disabled)::-webkit-slider-thumb {
+    background: var(--color-blue-800, #1e40af);
+}
+
+.dual-range-input--end:hover:not(:disabled)::-moz-range-thumb {
+    background: var(--color-blue-800, #1e40af);
+}
+
+.dual-range-input:active:not(:disabled)::-webkit-slider-thumb {
+    cursor: grabbing;
+    transform: scale(1.06);
+}
+
+.dual-range-input:active:not(:disabled)::-moz-range-thumb {
+    cursor: grabbing;
+    transform: scale(1.06);
+}
+
+.dual-range-input--start:focus-visible::-webkit-slider-thumb {
+    outline: 2px solid var(--color-blue-600, #2563eb);
+    outline-offset: 2px;
+}
+
+.dual-range-input--start:focus-visible::-moz-range-thumb {
+    outline: 2px solid var(--color-blue-600, #2563eb);
+    outline-offset: 2px;
+}
+
+.dual-range-input--end:focus-visible::-webkit-slider-thumb {
+    outline: 2px solid var(--color-blue-700, #1d4ed8);
+    outline-offset: 2px;
+}
+
+.dual-range-input--end:focus-visible::-moz-range-thumb {
+    outline: 2px solid var(--color-blue-700, #1d4ed8);
+    outline-offset: 2px;
+}
+
+.dual-range-input:disabled::-webkit-slider-thumb {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.dual-range-input:disabled::-moz-range-thumb {
+    cursor: not-allowed;
+    opacity: 0.6;
 }
