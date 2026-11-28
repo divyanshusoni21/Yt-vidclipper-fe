@@ -292,8 +292,8 @@ function EditVideoSpeed() {
         <div className="min-h-[100dvh] flex flex-col font-sans bg-zinc-50 text-zinc-950 overflow-x-hidden">
             <Header />
 
-            <main className="flex-1 pt-24 pb-16 px-4 sm:px-6">
-                <div className="max-w-5xl mx-auto space-y-6">
+            <main className="flex-1 pt-24 pb-16">
+                <div className="max-w-5xl mx-auto px-4 sm:px-6 space-y-6">
                     <div className="space-y-2">
                         <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-zinc-950">
                             Video Speed Editor

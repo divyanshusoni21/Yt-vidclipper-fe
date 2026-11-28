@@ -30,34 +30,53 @@ export const time_to_seconds = (timeStr) => {
 }
 
 /**
- * Parses flexible user timestamp input ("HH:MM:SS", "MM:SS", or plain seconds)
- * and returns a normalized zero-padded "HH:MM:SS" string, or null if invalid.
+ * Converts integer seconds into a zero-padded "HH:MM:SS" timestamp string clamped to [0, 86399].
  */
-export const parse_flexible_timestamp = (rawValue) => {
-    if (typeof rawValue !== 'string') return null
-    const trimmed = rawValue.trim()
-    if (!trimmed || !/^\d+(?::\d+){0,2}$/.test(trimmed)) return null
+export const seconds_to_time = (totalSeconds) => {
+    const safeSeconds = Math.max(0, Math.min(86399, Math.round(Number(totalSeconds) || 0)))
+    const hours = Math.floor(safeSeconds / 3600)
+    const minutes = Math.floor((safeSeconds % 3600) / 60)
+    const seconds = safeSeconds % 60
 
-    const parts = trimmed.split(':').map((part) => parseInt(part, 10))
-    if (parts.some((n) => !Number.isFinite(n) || n < 0)) return null
+    return [hours, minutes, seconds].map((part) => String(part).padStart(2, '0')).join(':')
+}
 
-    let totalSeconds = 0
-    if (parts.length === 1) {
-        totalSeconds = parts[0]
-    } else if (parts.length === 2) {
-        totalSeconds = parts[0] * 60 + parts[1]
-    } else if (parts.length === 3) {
-        totalSeconds = parts[0] * 3600 + parts[1] * 60 + parts[2]
-    } else {
-        return null
+/**
+ * Parses pasted timestamps such as "00:38:27", "00 : 38 : 27 . 0", "1:25", or raw seconds
+ * into integer seconds in [0, 86399], or returns null when the text is invalid.
+ */
+export const parse_pasted_timestamp = (text) => {
+    if (!text || typeof text !== 'string') return null
+
+    const compact = text.trim().replace(/\s*:\s*/g, ':').replace(/\s*\.\s*/g, '.')
+    if (!compact) return null
+
+    if (/^\d+(?:\.\d+)?$/.test(compact)) {
+        const parsedSeconds = Math.floor(parseFloat(compact))
+        return Math.max(0, Math.min(86399, parsedSeconds))
     }
 
-    const clamped = Math.min(Math.max(0, totalSeconds), 23 * 3600 + 59 * 60 + 59)
-    const hours = Math.floor(clamped / 3600)
-    const minutes = Math.floor((clamped % 3600) / 60)
-    const seconds = clamped % 60
+    const parts = compact.split(':')
+    if (parts.length !== 2 && parts.length !== 3) return null
 
-    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+    const lastPart = parts[parts.length - 1]
+    if (!/^\d+(?:\.\d+)?$/.test(lastPart)) return null
+    for (let i = 0; i < parts.length - 1; i += 1) {
+        if (!/^\d+$/.test(parts[i])) return null
+    }
+
+    let totalSeconds = 0
+    if (parts.length === 2) {
+        totalSeconds = parseInt(parts[0], 10) * 60 + Math.floor(parseFloat(parts[1]))
+    } else {
+        totalSeconds =
+            parseInt(parts[0], 10) * 3600 +
+            parseInt(parts[1], 10) * 60 +
+            Math.floor(parseFloat(parts[2]))
+    }
+
+    if (!Number.isFinite(totalSeconds)) return null
+    return Math.max(0, Math.min(86399, totalSeconds))
 }
 
 /**

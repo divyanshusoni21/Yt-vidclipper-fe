@@ -13,7 +13,7 @@ import {
 } from '@phosphor-icons/react'
 import Header from '../components/Header'
 import Footer from '../components/Footer'
-import RollingTimePicker from '../components/RollingTimePicker'
+import ClipRangePicker from '../components/ClipRangePicker'
 import ClipResultCard from '../components/ClipResultCard'
 import RateLimitBanner from '../components/RateLimitBanner'
 import {
@@ -30,6 +30,7 @@ import {
     format_countdown,
     format_duration,
     is_valid_youtube_url,
+    seconds_to_time,
     time_to_seconds,
 } from '../utils/timeUtils'
 
@@ -38,6 +39,11 @@ const EMPTY_RESULTS = {
     p480: { url: null, size: null, id: null },
 }
 
+const RESOLUTION_TABS = [
+    { id: '720p', label: '720' },
+    { id: '480p', label: '480' },
+]
+
 const read_stored_results = () => {
     try {
         const saved = sessionStorage.getItem('results')
@@ -45,6 +51,14 @@ const read_stored_results = () => {
     } catch {
         return EMPTY_RESULTS
     }
+}
+
+const post_youtube_listening = (iframe) => {
+    if (!iframe?.contentWindow) return
+    iframe.contentWindow.postMessage(
+        JSON.stringify({ event: 'listening' }),
+        'https://www.youtube.com'
+    )
 }
 
 /**
@@ -56,9 +70,11 @@ function Home() {
     const urlInputId = useId()
     const urlErrorId = useId()
     const emailInputId = useId()
+    const resolutionTabsId = useId()
     const urlInputRef = useRef(null)
     const iframeRef = useRef(null)
     const pollingIntervalRef = useRef(null)
+    const resolutionTabRefs = useRef({})
 
     const initialNavUrl = location.state?.youtubeUrl || ''
     const initialStoredUrl = sessionStorage.getItem('youtubeUrl') || ''
@@ -70,7 +86,7 @@ function Home() {
 
     const [youtubeUrl, setYoutubeUrl] = useState(() => initialNavUrl || initialStoredUrl)
     const [startTime, setStartTime] = useState(() => sessionStorage.getItem('startTime') || '00:00:00')
-    const [endTime, setEndTime] = useState(() => sessionStorage.getItem('endTime') || '00:00:00')
+    const [endTime, setEndTime] = useState(() => sessionStorage.getItem('endTime') || '00:05:00')
 
     const [clipRequestId, setClipRequestId] = useState(() => {
         if (navOverridesStoredVideo || sessionStorage.getItem('clipStatus') === 'cancelled') {
@@ -97,11 +113,11 @@ function Home() {
     const [results, setResults] = useState(() =>
         navOverridesStoredVideo ? EMPTY_RESULTS : read_stored_results()
     )
+    const [activeResolution, setActiveResolution] = useState('720p')
 
-    // Store video metadata keyed by videoId so stale metadata never bleeds across URL changes.
+    // Store video duration keyed by videoId so stale metadata never bleeds across URL changes.
     const [videoMeta, setVideoMeta] = useState(() => ({
         videoId: extract_youtube_video_id(initialNavUrl || initialStoredUrl),
-        title: navOverridesStoredVideo ? '' : sessionStorage.getItem('videoTitle') || '',
         duration: 0,
     }))
 
@@ -117,7 +133,6 @@ function Home() {
     const speedRateLimit = useRateLimitCooldown('speedEditRateLimitUntil')
 
     const videoId = extract_youtube_video_id(youtubeUrl)
-    const videoTitle = videoMeta.videoId === videoId ? videoMeta.title : ''
     const videoDuration = videoMeta.videoId === videoId ? videoMeta.duration : 0
 
     const isClipTaskActive = Boolean(
@@ -150,6 +165,7 @@ function Home() {
         setProcessStartTime(null)
         setClipDuration(0)
         setResults(EMPTY_RESULTS)
+        setActiveResolution('720p')
         setEmailFeedback(null)
         sessionStorage.removeItem('clipRequestId')
         sessionStorage.removeItem('clipStatus')
@@ -161,12 +177,13 @@ function Home() {
     const handle_url_change = (nextUrl) => {
         const nextVideoId = extract_youtube_video_id(nextUrl)
         setYoutubeUrl(nextUrl)
-        setErrors((prev) => ({ ...prev, youtubeUrl: '', api: '' }))
+        setErrors((prev) => ({ ...prev, youtubeUrl: '', api: '', logic: '' }))
 
         if (nextVideoId !== videoId) {
             reset_clip_task_state()
-            setVideoMeta({ videoId: nextVideoId, title: '', duration: 0 })
-            sessionStorage.removeItem('videoTitle')
+            setStartTime('00:00:00')
+            setEndTime('00:05:00')
+            setVideoMeta({ videoId: nextVideoId, duration: 0 })
         }
     }
 
@@ -202,7 +219,6 @@ function Home() {
         }
         sessionStorage.setItem('startTime', startTime)
         sessionStorage.setItem('endTime', endTime)
-        sessionStorage.setItem('videoTitle', videoTitle)
         sessionStorage.setItem('clipDuration', String(clipDuration || 0))
 
         if (clipRequestId) {
@@ -224,38 +240,38 @@ function Home() {
         }
 
         sessionStorage.setItem('results', JSON.stringify(results))
-    }, [youtubeUrl, startTime, endTime, videoTitle, clipDuration, clipRequestId, clipStatus, processStartTime, results])
+    }, [youtubeUrl, startTime, endTime, clipDuration, clipRequestId, clipStatus, processStartTime, results])
 
-    // Fetch video title via noembed and duration via YouTube iframe postMessage when videoId changes.
+    // Fetch video duration via YouTube iframe postMessage when videoId changes.
     useEffect(() => {
         if (!videoId) return undefined
-
-        let ignore = false
-        const normalizedUrl = `https://www.youtube.com/watch?v=${videoId}`
-
-        fetch(`https://noembed.com/embed?url=${encodeURIComponent(normalizedUrl)}`)
-            .then((res) => res.json())
-            .then((data) => {
-                if (!ignore && data?.title) {
-                    setVideoMeta((prev) => ({
-                        videoId,
-                        title: data.title,
-                        duration: prev.videoId === videoId ? prev.duration : 0,
-                    }))
-                }
-            })
-            .catch(() => {})
 
         const handle_iframe_message = (event) => {
             if (event.origin !== 'https://www.youtube.com') return
             try {
-                const payload = JSON.parse(event.data)
-                if (payload.event === 'infoDelivery' && payload.info?.duration) {
-                    setVideoMeta((prev) => ({
-                        videoId,
-                        title: prev.videoId === videoId ? prev.title : '',
-                        duration: payload.info.duration,
-                    }))
+                const payload = typeof event.data === 'string' ? JSON.parse(event.data) : event.data
+                const reportedDuration = payload?.info?.duration
+                if (
+                    (payload?.event === 'initialDelivery' || payload?.event === 'infoDelivery') &&
+                    typeof reportedDuration === 'number' &&
+                    reportedDuration > 0
+                ) {
+                    const safeDuration = Math.floor(reportedDuration)
+                    setVideoMeta({ videoId, duration: safeDuration })
+                    // Keep saved or default timestamps within the actual loaded video length.
+                    setStartTime((prevStart) => {
+                        const sec = time_to_seconds(prevStart)
+                        return sec > Math.max(0, safeDuration - 1)
+                            ? seconds_to_time(Math.max(0, safeDuration - 5))
+                            : prevStart
+                    })
+                    setEndTime((prevEnd) => {
+                        const sec = time_to_seconds(prevEnd)
+                        if (sec <= 0 || sec > safeDuration) {
+                            return seconds_to_time(Math.min(300, safeDuration))
+                        }
+                        return prevEnd
+                    })
                 }
             } catch {
                 // Ignore unrelated postMessage frames.
@@ -264,19 +280,13 @@ function Home() {
 
         window.addEventListener('message', handle_iframe_message)
 
-        const listeningTimer = setTimeout(() => {
-            if (iframeRef.current?.contentWindow) {
-                iframeRef.current.contentWindow.postMessage(
-                    JSON.stringify({ event: 'listening' }),
-                    'https://www.youtube.com'
-                )
-            }
-        }, 1000)
+        const retryTimerOne = setTimeout(() => post_youtube_listening(iframeRef.current), 800)
+        const retryTimerTwo = setTimeout(() => post_youtube_listening(iframeRef.current), 2000)
 
         return () => {
-            ignore = true
             window.removeEventListener('message', handle_iframe_message)
-            clearTimeout(listeningTimer)
+            clearTimeout(retryTimerOne)
+            clearTimeout(retryTimerTwo)
         }
     }, [videoId])
 
@@ -455,6 +465,18 @@ function Home() {
         }
     }
 
+    const handle_resolution_tab_keydown = (currentIndex, e) => {
+        if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+        e.preventDefault()
+        const nextIndex =
+            e.key === 'ArrowRight'
+                ? (currentIndex + 1) % RESOLUTION_TABS.length
+                : (currentIndex - 1 + RESOLUTION_TABS.length) % RESOLUTION_TABS.length
+        const nextTab = RESOLUTION_TABS[nextIndex]
+        setActiveResolution(nextTab.id)
+        resolutionTabRefs.current[nextTab.id]?.focus()
+    }
+
     const showResultsSection =
         clipStatus === 'completed' || (isProcessing && clipStatus !== 'cancelled')
 
@@ -462,8 +484,8 @@ function Home() {
         <div className="min-h-[100dvh] flex flex-col bg-zinc-50 text-zinc-950 font-sans overflow-x-hidden">
             <Header />
 
-            <main className="flex-1 pt-20 pb-14 px-4 sm:px-6">
-                <div className="max-w-5xl mx-auto space-y-5">
+            <main className="flex-1 pt-20 pb-14">
+                <div className="max-w-5xl mx-auto px-4 sm:px-6 space-y-5">
                     {/* Compact Studio Header */}
                     <div className="space-y-1.5">
                         <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-950">
@@ -527,10 +549,11 @@ function Home() {
                                     <button
                                         type="button"
                                         onClick={handle_paste_url}
-                                        className="inline-flex items-center gap-1.5 min-h-[38px] px-3.5 py-1.5 rounded-lg bg-white border border-zinc-200 text-zinc-800 hover:bg-zinc-100 text-xs sm:text-sm font-semibold transition-colors shrink-0"
+                                        aria-label="Paste YouTube URL"
+                                        title="Paste"
+                                        className="w-[38px] h-[38px] inline-flex items-center justify-center rounded-lg bg-white border border-zinc-200 text-zinc-700 hover:bg-zinc-100 hover:text-zinc-950 transition-colors shrink-0"
                                     >
-                                        <ClipboardText size={16} weight="bold" aria-hidden="true" />
-                                        Paste
+                                        <ClipboardText size={18} weight="bold" aria-hidden="true" />
                                     </button>
                                 </div>
                                 {errors.youtubeUrl && (
@@ -545,80 +568,64 @@ function Home() {
                                 )}
                             </div>
 
-                            {/* Side-by-side Preview & Timestamp Controls once URL is pasted so everything stays above the fold */}
-                            <div
-                                className={`pt-4 border-t border-zinc-200 ${
-                                    videoId ? 'grid grid-cols-1 lg:grid-cols-12 gap-6 items-start' : ''
-                                }`}
-                            >
-                                {videoId && (
-                                    <div className="lg:col-span-6 min-w-0 space-y-2.5">
+                            {/* Persistent side-by-side layout: video preview on the left, timestamp controls on the right */}
+                            <div className="pt-4 border-t border-zinc-200 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                                <div className="lg:col-span-6 min-w-0 space-y-2.5">
+                                    {videoId ? (
                                         <div className="w-full aspect-video rounded-xl overflow-hidden bg-zinc-950 border border-zinc-200">
                                             <iframe
                                                 ref={iframeRef}
+                                                onLoad={() => post_youtube_listening(iframeRef.current)}
                                                 className="w-full h-full"
                                                 src={`https://www.youtube.com/embed/${videoId}?enablejsapi=1&origin=${window.location.origin}`}
-                                                title={videoTitle ? `Preview of ${videoTitle}` : 'YouTube video preview'}
+                                                title="YouTube video preview"
                                                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                                                 allowFullScreen
                                             />
                                         </div>
-                                        {(videoTitle || videoDuration > 0) && (
-                                            <div className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2 rounded-xl bg-zinc-50 border border-zinc-200 text-xs sm:text-sm">
-                                                <p className="font-medium text-zinc-900 truncate flex-1 min-w-0">
-                                                    {videoTitle || 'Video ready'}
-                                                </p>
-                                                {videoDuration > 0 && (
-                                                    <span className="font-mono tabular-nums text-xs font-semibold text-zinc-600 bg-white border border-zinc-200 px-2.5 py-0.5 rounded-lg shrink-0">
-                                                        Total {format_duration(videoDuration)}
-                                                    </span>
-                                                )}
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
+                                    ) : (
+                                        <div className="w-full aspect-video rounded-xl bg-zinc-50 border border-dashed border-zinc-300 flex flex-col items-center justify-center text-center px-6 gap-2">
+                                            <YoutubeLogo
+                                                size={36}
+                                                weight="duotone"
+                                                aria-hidden="true"
+                                                className="text-zinc-400"
+                                            />
+                                            <p className="text-sm font-semibold text-zinc-700">Video preview</p>
+                                            <p className="text-xs text-zinc-500 max-w-xs">
+                                                Paste a YouTube link above to load the player.
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
 
-                                <div
-                                    className={
-                                        videoId
-                                            ? 'lg:col-span-6 min-w-0 space-y-4'
-                                            : 'grid grid-cols-1 lg:grid-cols-12 gap-5 items-end'
-                                    }
-                                >
-                                    <div
-                                        className={
-                                            videoId
-                                                ? 'grid grid-cols-1 sm:grid-cols-2 gap-3'
-                                                : 'lg:col-span-7 min-w-0 grid grid-cols-1 sm:grid-cols-2 gap-3'
-                                        }
-                                    >
-                                        <RollingTimePicker
-                                            label="Start Time"
-                                            value={startTime}
-                                            onChange={(val) => {
-                                                setStartTime(val)
-                                                setErrors((prev) => ({ ...prev, logic: '' }))
-                                            }}
-                                            ariaPrefix="Start time"
-                                        />
-                                        <RollingTimePicker
-                                            label="End Time"
-                                            value={endTime}
-                                            onChange={(val) => {
-                                                setEndTime(val)
-                                                setErrors((prev) => ({ ...prev, logic: '' }))
-                                            }}
-                                            ariaPrefix="End time"
-                                        />
-                                    </div>
+                                <div className="lg:col-span-6 min-w-0 space-y-4">
+                                    <ClipRangePicker
+                                        startTime={startTime}
+                                        endTime={endTime}
+                                        maxDuration={videoDuration}
+                                        disabled={isProcessing}
+                                        onStartChange={(val) => {
+                                            setStartTime(val)
+                                            setErrors((prev) => ({ ...prev, logic: '' }))
+                                        }}
+                                        onEndChange={(val) => {
+                                            setEndTime(val)
+                                            setErrors((prev) => ({ ...prev, logic: '' }))
+                                        }}
+                                    />
 
-                                    <div className={videoId ? 'space-y-3 min-w-0' : 'lg:col-span-5 min-w-0 space-y-3'}>
+                                    <div className="space-y-3 min-w-0">
                                         <div className="flex items-center justify-between gap-2 flex-wrap px-3.5 py-2 rounded-xl bg-zinc-50 border border-zinc-200 text-xs">
                                             <span
                                                 className={`font-mono tabular-nums font-semibold ${
                                                     selectedLengthSeconds >= 5 && selectedLengthSeconds <= 300
                                                         ? 'text-blue-700'
-                                                        : 'text-zinc-800'
+                                                        : selectedLengthSeconds > 300 ||
+                                                            (selectedLengthSeconds > 0 &&
+                                                                selectedLengthSeconds < 5)
+                                                          ? 'text-red-600'
+                                                          : 'text-zinc-800'
                                                 }`}
                                             >
                                                 Clip length:{' '}
@@ -629,7 +636,7 @@ function Home() {
                                             <span className="text-zinc-500">Allowed: 5s to 5m</span>
                                         </div>
 
-                                        <div className="flex flex-wrap items-center gap-2.5 w-full">
+                                        <div className="flex items-center gap-2.5 w-full">
                                             <button
                                                 type="submit"
                                                 disabled={
@@ -639,7 +646,7 @@ function Home() {
                                                     clipStatus === 'cancelled' ||
                                                     clipRateLimit.isLimited
                                                 }
-                                                className="flex-1 min-w-[160px] inline-flex items-center justify-center gap-2 min-h-[46px] px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm sm:text-base font-semibold transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                                                className="flex-1 min-w-0 inline-flex items-center justify-center gap-2 min-h-[46px] px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm sm:text-base font-semibold transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
                                             >
                                                 {isCancelling || clipStatus === 'cancelled' ? (
                                                     <>
@@ -673,10 +680,11 @@ function Home() {
                                                 <button
                                                     type="button"
                                                     onClick={handle_cancel_request}
-                                                    className="shrink-0 inline-flex items-center justify-center gap-1.5 min-h-[46px] px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-semibold transition-all active:scale-[0.98] whitespace-nowrap"
+                                                    aria-label="Cancel clip request"
+                                                    title="Cancel"
+                                                    className="shrink-0 inline-flex items-center justify-center w-[46px] h-[46px] rounded-xl bg-red-600 hover:bg-red-700 text-white transition-all active:scale-[0.98]"
                                                 >
-                                                    <X size={16} weight="bold" aria-hidden="true" />
-                                                    Cancel
+                                                    <X size={18} weight="bold" aria-hidden="true" />
                                                 </button>
                                             )}
                                         </div>
@@ -713,32 +721,78 @@ function Home() {
                     {/* Generated Clip Results */}
                     {showResultsSection && (
                         <section className="space-y-4">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                                <h2 className="text-xl font-bold tracking-tight text-zinc-950">
-                                    Your Clips
-                                </h2>
-                                <span className="font-mono tabular-nums text-xs font-medium text-zinc-600 bg-white border border-zinc-200 px-3 py-1 rounded-lg">
+                            <div className="flex items-center justify-between gap-2">
+                                <div
+                                    role="tablist"
+                                    aria-label="Clip resolution"
+                                    className="inline-grid grid-cols-2 shrink-0 sm:min-w-[180px] p-1 rounded-xl bg-zinc-200/70 border border-zinc-200"
+                                >
+                                    {RESOLUTION_TABS.map((tab, index) => {
+                                        const isActive = activeResolution === tab.id
+                                        return (
+                                            <button
+                                                key={tab.id}
+                                                ref={(el) => {
+                                                    resolutionTabRefs.current[tab.id] = el
+                                                }}
+                                                type="button"
+                                                role="tab"
+                                                id={`${resolutionTabsId}-tab-${tab.id}`}
+                                                aria-selected={isActive}
+                                                aria-controls={`${resolutionTabsId}-panel-${tab.id}`}
+                                                aria-label={`${tab.id} clip`}
+                                                tabIndex={isActive ? 0 : -1}
+                                                onClick={() => setActiveResolution(tab.id)}
+                                                onKeyDown={(e) => handle_resolution_tab_keydown(index, e)}
+                                                className={`min-h-[32px] sm:min-h-[38px] px-3 sm:px-5 py-1 sm:py-1.5 rounded-lg font-mono tabular-nums text-xs sm:text-sm font-semibold transition-all ${
+                                                    isActive
+                                                        ? 'bg-blue-50 text-blue-700 border border-blue-200 shadow-xs'
+                                                        : 'text-zinc-600 border border-transparent hover:text-zinc-900'
+                                                }`}
+                                            >
+                                                {tab.label}
+                                            </button>
+                                        )
+                                    })}
+                                </div>
+
+                                <span className="ml-auto font-mono tabular-nums text-[11px] sm:text-xs font-medium text-zinc-600 bg-white border border-zinc-200 px-2 sm:px-3 py-1 rounded-lg whitespace-nowrap truncate">
                                     {startTime} to {endTime} ({format_duration(effectiveClipDuration)})
                                 </span>
                             </div>
 
-                            <div className="space-y-3">
-                                <ClipResultCard
-                                    key={`720p-${results.p720.id || 'pending'}`}
-                                    resolution="720p"
-                                    clip={results.p720}
-                                    isProcessing={isProcessing}
-                                    clipDuration={effectiveClipDuration}
-                                    speedRateLimitCooldown={speedRateLimit}
-                                />
-                                <ClipResultCard
-                                    key={`480p-${results.p480.id || 'pending'}`}
-                                    resolution="480p"
-                                    clip={results.p480}
-                                    isProcessing={isProcessing}
-                                    clipDuration={effectiveClipDuration}
-                                    speedRateLimitCooldown={speedRateLimit}
-                                />
+                            <div>
+                                {/* Keep both resolution cards mounted so switching tabs preserves open or active speed edits. */}
+                                <div
+                                    role="tabpanel"
+                                    id={`${resolutionTabsId}-panel-720p`}
+                                    aria-labelledby={`${resolutionTabsId}-tab-720p`}
+                                    hidden={activeResolution !== '720p'}
+                                >
+                                    <ClipResultCard
+                                        key={`720p-${results.p720.id || 'pending'}`}
+                                        resolution="720p"
+                                        clip={results.p720}
+                                        isProcessing={isProcessing}
+                                        clipDuration={effectiveClipDuration}
+                                        speedRateLimitCooldown={speedRateLimit}
+                                    />
+                                </div>
+                                <div
+                                    role="tabpanel"
+                                    id={`${resolutionTabsId}-panel-480p`}
+                                    aria-labelledby={`${resolutionTabsId}-tab-480p`}
+                                    hidden={activeResolution !== '480p'}
+                                >
+                                    <ClipResultCard
+                                        key={`480p-${results.p480.id || 'pending'}`}
+                                        resolution="480p"
+                                        clip={results.p480}
+                                        isProcessing={isProcessing}
+                                        clipDuration={effectiveClipDuration}
+                                        speedRateLimitCooldown={speedRateLimit}
+                                    />
+                                </div>
                             </div>
 
                             {clipStatus === 'completed' && (

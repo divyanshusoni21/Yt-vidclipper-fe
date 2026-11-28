@@ -29,7 +29,6 @@ function ClipResultCard({
     const [copyState, setCopyState] = useState('idle') // 'idle' | 'copied' | 'error'
     const [downloadError, setDownloadError] = useState('')
 
-    const qualityTag = resolution === '720p' ? 'HD' : 'SD'
     const isClipReady = Boolean(clip?.url && clip?.id)
 
     const handle_share_url = async () => {
@@ -59,30 +58,23 @@ function ClipResultCard({
 
     return (
         <div className="bg-white rounded-2xl border border-zinc-200 p-4 sm:p-5">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="flex items-center gap-3 flex-wrap">
-                    <span className="font-mono font-semibold text-sm bg-zinc-100 text-zinc-950 border border-zinc-200 px-3 py-1 rounded-lg">
-                        {resolution}
-                    </span>
-                    <span className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
-                        {qualityTag}
-                    </span>
-
+            <div className="flex items-center justify-between gap-2 sm:gap-3">
+                <div className="flex items-center gap-2 flex-wrap min-w-0">
                     {clip?.size ? (
-                        <span className="font-mono tabular-nums text-xs text-zinc-600 bg-zinc-50 border border-zinc-200 px-2.5 py-1 rounded-lg">
+                        <span className="font-mono tabular-nums text-xs text-zinc-600 bg-zinc-50 border border-zinc-200 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg">
                             {clip.size}
                         </span>
                     ) : (
                         isProcessing && (
                             <span
                                 aria-label={`Generating ${resolution} clip`}
-                                className="inline-block h-5 w-24 bg-zinc-200 rounded-md animate-pulse"
+                                className="inline-block h-5 w-20 sm:w-24 bg-zinc-200 rounded-md animate-pulse"
                             />
                         )
                     )}
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                     <button
                         type="button"
                         disabled={!isClipReady}
@@ -90,13 +82,13 @@ function ClipResultCard({
                         aria-controls={panelId}
                         aria-label={`Edit Speed for ${resolution} clip`}
                         onClick={() => setIsSpeedEditorOpen((prev) => !prev)}
-                        className={`inline-flex items-center justify-center gap-1.5 min-h-[42px] px-4 py-2 rounded-xl text-sm font-medium border transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap ${
+                        className={`inline-flex items-center justify-center gap-1.5 min-h-[38px] sm:min-h-[40px] px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-medium border transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap ${
                             isSpeedEditorOpen
-                                ? 'bg-blue-50 text-blue-700 border-blue-200'
-                                : 'bg-white text-zinc-800 border-zinc-200 hover:bg-zinc-50'
+                                ? 'bg-blue-100 text-blue-800 border-blue-300'
+                                : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
                         }`}
                     >
-                        <Gauge size={17} weight="bold" aria-hidden="true" />
+                        <Gauge size={16} weight="bold" aria-hidden="true" />
                         Edit Speed
                         <CaretDown
                             size={14}
@@ -112,19 +104,14 @@ function ClipResultCard({
                         type="button"
                         disabled={!clip?.url}
                         aria-label={`Share URL for ${resolution} clip`}
+                        title={copyState === 'copied' ? 'Copied!' : 'Share URL'}
                         onClick={handle_share_url}
-                        className="inline-flex items-center justify-center gap-1.5 min-h-[42px] px-4 py-2 rounded-xl text-sm font-medium bg-white text-zinc-800 border border-zinc-200 hover:bg-zinc-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                        className="w-[38px] h-[38px] sm:w-[40px] sm:h-[40px] inline-flex items-center justify-center rounded-xl bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {copyState === 'copied' ? (
-                            <>
-                                <Check size={17} weight="bold" aria-hidden="true" className="text-emerald-600" />
-                                Copied!
-                            </>
+                            <Check size={17} weight="bold" aria-hidden="true" className="text-emerald-600" />
                         ) : (
-                            <>
-                                <LinkSimple size={17} weight="bold" aria-hidden="true" />
-                                Share URL
-                            </>
+                            <LinkSimple size={17} weight="bold" aria-hidden="true" />
                         )}
                     </button>
 
@@ -132,19 +119,14 @@ function ClipResultCard({
                         type="button"
                         disabled={!clip?.id || isDownloading}
                         aria-label={`Download ${resolution} clip`}
+                        title={isDownloading ? 'Downloading...' : 'Download'}
                         onClick={handle_download}
-                        className="inline-flex items-center justify-center gap-1.5 min-h-[42px] px-5 py-2 rounded-xl text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                        className="w-[38px] h-[38px] sm:w-[40px] sm:h-[40px] inline-flex items-center justify-center rounded-xl bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {isDownloading ? (
-                            <>
-                                <CircleNotch size={17} weight="bold" aria-hidden="true" className="animate-spin" />
-                                Downloading...
-                            </>
+                            <CircleNotch size={17} weight="bold" aria-hidden="true" className="animate-spin" />
                         ) : (
-                            <>
-                                <DownloadSimple size={17} weight="bold" aria-hidden="true" />
-                                Download
-                            </>
+                            <DownloadSimple size={17} weight="bold" aria-hidden="true" />
                         )}
                     </button>
                 </div>
